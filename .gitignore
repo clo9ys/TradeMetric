@@ -1,0 +1,19 @@
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# секреты
+.env
+
+# ide, mac
+.idea/
+.vscode/
+.DS_Store
+
+# фронт
+node_modules/
+dist/
