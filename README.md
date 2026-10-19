@@ -42,7 +42,7 @@ Docker-compose, миграции и запуск сервера допишем, 
 
 ## Команда
 
-- Полина Журавлева: TeamLead
+- Полина Журавлева: TeamLead, frontend
 - Искандер Хамматов: Frontend
 - Максим Столповский: Backend (server logic), DevOps
 - Дарья Новикова: Backend (business logic), testing
