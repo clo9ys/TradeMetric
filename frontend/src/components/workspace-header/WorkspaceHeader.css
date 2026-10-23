@@ -1,0 +1,13 @@
+.workspace-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 1.25rem; min-height: 3.8125rem; border-bottom: 1px solid var(--color-divider); }
+.tabs { display: flex; align-self: stretch; align-items: flex-end; }
+.tab { display: block; position: relative; padding: 1rem 1.3125rem .4375rem; white-space: nowrap; font-size: 1.625rem; line-height: 2.25rem; font-weight: 700; }
+.tab.active, .tab:hover { color: var(--color-brand); }
+.tab.active::after { content: ''; position: absolute; height: 2px; background: var(--color-brand); bottom: -1px; left: 0; right: 0; }
+.currency-picker { display: flex; align-items: center; gap: .25rem; margin-bottom: .875rem; padding: 0 .9375rem; height: 2.875rem; background: var(--color-surface); border: 1px solid var(--color-card-border); border-radius: .5625rem; white-space: nowrap; font-size: .875rem; font-weight: 700; }
+.currency-picker select { cursor: pointer; appearance: none; border: 0; background: transparent; color: inherit; padding: 0 0 0 1px; font-size: .875rem; font-weight: 700; }
+.currency-picker svg { width: .875rem; height: .875rem; margin-left: .4375rem; pointer-events: none; }
+@media (max-width: 760px) {
+  .workspace-header { flex-wrap: wrap-reverse; gap: .5rem; }
+  .currency-picker { margin: 0 0 0 auto; }
+  .tab { font-size: 1.25rem; padding-inline: .75rem; }
+}

@@ -1,0 +1,4 @@
+.app-shell { display: flex; min-height: 100dvh; }
+.workspace { flex: 1; min-width: 0; padding: 1.9375rem 4.6875rem 2.75rem 4.625rem; }
+.workspace-content { margin-top: 1.6875rem; }
+@media (max-width: 760px) { .app-shell { flex-direction: column; } .workspace { padding: 1.25rem; } }
