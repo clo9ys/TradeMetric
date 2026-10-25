@@ -1,0 +1,39 @@
+{
+  "count": 3,
+  "total": 445,
+  "items": [
+    {
+      "isin_code": "XS0088543193",
+      "emission_id": "238",
+      "date": "2026-10-23",
+      "avar_price": "33.635",
+      "nkd": "421.46",
+      "dur_mod": "0.57239628788342",
+      "convexity": "0.63541285949664",
+      "dirty_price_currency": "3784.96",
+      "trading_ground_name_eng": "Cbonds Estimation"
+    },
+    {
+      "isin_code": "XS0088543193",
+      "emission_id": "238",
+      "date": "2026-10-23",
+      "avar_price": "106.75",
+      "nkd": "421.46",
+      "dur_mod": "1.3862425787207",
+      "convexity": "3.3417863757279",
+      "dirty_price_currency": "11096.46",
+      "trading_ground_name_eng": "NSMA MIRP"
+    },
+    {
+      "isin_code": "XS0088543193",
+      "emission_id": "238",
+      "date": "2026-10-23",
+      "avar_price": "106.1026",
+      "nkd": "421.46",
+      "dur_mod": "1.3802585825657",
+      "convexity": "3.3142111054288",
+      "dirty_price_currency": "11031.72",
+      "trading_ground_name_eng": "Moscow Exchange T+ (USD)"
+    }
+  ]
+}
