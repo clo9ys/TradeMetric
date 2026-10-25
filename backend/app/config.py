@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     session_ttl_hours: int = 12
     cookie_secure: bool = False  # на проде в .env будет COOKIE_SECURE=true
 
+    cbonds_login: str | None = None
+    cbonds_password: str | None = None
+    provider_timeout_seconds: float = 10.0
+
     @property
     def database_url(self) -> URL:
         # URL.create сам экранирует спецсимволы в пароле
