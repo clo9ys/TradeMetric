@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import date, timedelta, timezone
 
 from app.db.models import InstrumentSnapshot
@@ -10,6 +11,12 @@ from app.domain.market_data import NormalizedBondData
 from app.providers.base import BondDataProvider
 
 MOSCOW = timezone(timedelta(hours=3))
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedMarketData:
+    snapshots: dict[str, InstrumentSnapshot]
+    new_snapshots: tuple[InstrumentSnapshot, ...]
 
 
 def snapshot_to_data(snapshot: InstrumentSnapshot) -> NormalizedBondData:
@@ -87,9 +94,27 @@ class MarketDataService:
         calculation_date: date,
         last_trading_date: date,
     ) -> dict[str, InstrumentSnapshot]:
+        prepared = await self.prepare_snapshots(
+            isins,
+            calculation_date=calculation_date,
+            last_trading_date=last_trading_date,
+        )
+        if prepared.new_snapshots:
+            async with self._uow as uow:
+                await uow.snapshots.add_many(prepared.new_snapshots)
+                await uow.commit()
+        return prepared.snapshots
+
+    async def prepare_snapshots(
+        self,
+        isins: Sequence[str],
+        *,
+        calculation_date: date,
+        last_trading_date: date,
+    ) -> PreparedMarketData:
         unique_isins = list(dict.fromkeys(validate_isin(isin) for isin in isins))
         if not unique_isins:
-            return {}
+            return PreparedMarketData({}, ())
 
         async with self._uow as uow:
             cached = await uow.snapshots.get_fetched_on_date(unique_isins, calculation_date)
@@ -127,9 +152,7 @@ class MarketDataService:
             new_snapshots.append(snapshot)
             resolved[isin] = snapshot
 
-        if new_snapshots:
-            async with self._uow as uow:
-                await uow.snapshots.add_many(new_snapshots)
-                await uow.commit()
-
-        return {isin: resolved[isin] for isin in unique_isins}
+        return PreparedMarketData(
+            snapshots={isin: resolved[isin] for isin in unique_isins},
+            new_snapshots=tuple(new_snapshots),
+        )

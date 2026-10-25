@@ -204,6 +204,25 @@ async def test_second_call_reuses_snapshot_saved_by_first_call():
 
 
 @pytest.mark.asyncio
+async def test_prepare_snapshots_does_not_write_before_calculation_transaction():
+    repository = FakeSnapshotRepository()
+    uow = FakeUnitOfWork(repository)
+    provider = FakeProvider({FIRST_ISIN: bond_data()})
+
+    prepared = await MarketDataService(uow, provider).prepare_snapshots(
+        [FIRST_ISIN, FIRST_ISIN],
+        calculation_date=CALCULATION_DATE,
+        last_trading_date=LAST_TRADING_DATE,
+    )
+
+    assert list(prepared.snapshots) == [FIRST_ISIN]
+    assert prepared.new_snapshots == (prepared.snapshots[FIRST_ISIN],)
+    assert repository.added == []
+    assert uow.commits == 0
+    assert provider.calls == [FIRST_ISIN]
+
+
+@pytest.mark.asyncio
 async def test_older_valid_candidate_is_used_when_newer_candidate_is_stale():
     valid = cached(bond_data())
     stale = cached(
