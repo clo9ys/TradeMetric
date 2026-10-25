@@ -1,6 +1,6 @@
 import os
 import uuid
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -8,11 +8,25 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, create_async_engine
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from app.db.models import InstrumentSnapshot
-from app.services.calculation import calculate_total_dv01, calculate_trade_metrics
-from app.services.market_data import snapshot_to_data
+from app.db.uow import UnitOfWork
+from app.domain.enums import CouponType, MarketDataSource, PriceType, QuoteKind
+from app.domain.market_data import NormalizedBondData
+from app.services.calculation import (
+    CalculationService,
+    TradeRequest,
+    calculate_total_dv01,
+    calculate_trade_metrics,
+)
+from app.services.market_data import MarketDataService, snapshot_to_data
 
 
 @pytest.fixture
@@ -73,7 +87,7 @@ async def insert_snapshot(
                 "as_of_date": date(2026, 10, 23),
                 "risk_as_of_date": date(2026, 10, 23) if coupon_type == "fixed" else None,
                 "accrued_as_of_date": date(2026, 10, 23) if price_type == "clean" else None,
-                "fetched_at": datetime(2026, 10, 25, tzinfo=timezone.utc),
+                "fetched_at": datetime(2026, 10, 25, tzinfo=UTC),
                 "currency": currency,
                 "quote_kind": quote_kind,
                 "quote_value": Decimal(quote_value),
@@ -144,7 +158,7 @@ async def test_python_calculation_with_postgresql_snapshots_and_saved_trades(
                 ) VALUES (:user_id, :now, :now, 'python-v1', 'test-v1') RETURNING id
                 """
             ),
-            {"user_id": user_id, "now": datetime(2026, 10, 25, tzinfo=timezone.utc)},
+            {"user_id": user_id, "now": datetime(2026, 10, 25, tzinfo=UTC)},
         )
     ).scalar_one()
 
@@ -184,18 +198,22 @@ async def test_python_calculation_with_postgresql_snapshots_and_saved_trades(
         )
 
     rows = (
-        await database.execute(
-            text(
-                """
+        (
+            await database.execute(
+                text(
+                    """
                 SELECT line_number, snapshot_id, quantity, current_fair_value,
                        duration_used, convexity_used, dv01
                 FROM calculation_trades WHERE calculation_id = :calculation_id
                 ORDER BY line_number
                 """
-            ),
-            {"calculation_id": calculation_id},
+                ),
+                {"calculation_id": calculation_id},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
 
     assert len(rows) == 4
     assert rows[0]["snapshot_id"] == rows[2]["snapshot_id"] == fixed_clean
@@ -211,3 +229,102 @@ async def test_python_calculation_with_postgresql_snapshots_and_saved_trades(
         assert row["convexity_used"] == result.convexity_used
         assert row["dv01"] == result.dv01_rub
     assert calculate_total_dv01(metrics) == sum((row["dv01"] for row in rows), Decimal(0))
+
+
+class FakeBondProvider:
+    def __init__(self):
+        self.calls = []
+
+    async def get_bond(self, isin):
+        self.calls.append(isin)
+        return NormalizedBondData(
+            isin=isin,
+            source=MarketDataSource.CBONDS,
+            currency="RUB",
+            nominal_per_bond=Decimal("1000"),
+            quote_kind=QuoteKind.PERCENT,
+            quote_value=Decimal("101.25"),
+            price_type=PriceType.CLEAN,
+            quote_source="synthetic integration test",
+            quote_as_of_date=date(2026, 10, 23),
+            coupon_type=CouponType.FIXED,
+            fetched_at=datetime(2026, 10, 25, 12, tzinfo=UTC),
+            accrued_per_bond=Decimal("12.3"),
+            accrued_as_of_date=date(2026, 10, 23),
+            modified_duration=Decimal("4.2"),
+            convexity=Decimal("19.5"),
+            risk_as_of_date=date(2026, 10, 23),
+        )
+
+
+def calculation_service(connection: AsyncConnection, provider: FakeBondProvider):
+    factory = async_sessionmaker(
+        bind=connection,
+        expire_on_commit=False,
+        join_transaction_mode="create_savepoint",
+    )
+    uow = UnitOfWork(factory)
+    market_data = MarketDataService(uow, provider)
+    return CalculationService(
+        uow,
+        market_data,
+        clock=lambda: datetime(2026, 10, 25, 12, tzinfo=UTC),
+    )
+
+
+async def test_service_commits_each_line_and_reuses_snapshot_on_second_run(
+    database: AsyncConnection,
+):
+    user_id = (
+        await database.execute(
+            text(
+                "INSERT INTO users (email, password_hash) "
+                "VALUES ('service@example.test', 'test') RETURNING id"
+            )
+        )
+    ).scalar_one()
+    provider = FakeBondProvider()
+    service = calculation_service(database, provider)
+    isin = "RU000A10D4Y2"
+    lines = [TradeRequest(uuid.uuid4(), isin, 3), TradeRequest(uuid.uuid4(), isin, -1)]
+
+    first = await service.calculate(user_id, lines, last_trading_date=date(2026, 10, 23))
+    second = await service.calculate(user_id, lines, last_trading_date=date(2026, 10, 23))
+
+    assert provider.calls == [isin]
+    assert first.trades[0].snapshot_id == first.trades[1].snapshot_id
+    assert second.trades[0].snapshot_id == first.trades[0].snapshot_id
+    assert first.total_dv01_rub == second.total_dv01_rub
+    assert await database.scalar(text("SELECT COUNT(*) FROM instrument_snapshots")) == 1
+    assert await database.scalar(text("SELECT COUNT(*) FROM calculations")) == 2
+    assert await database.scalar(text("SELECT COUNT(*) FROM calculation_trades")) == 4
+    assert (
+        await database.scalar(
+            text(
+                "SELECT COUNT(*) FROM calculation_trades "
+                "WHERE fx_rate_rub = 1 AND fx_source = 'RUB'"
+            )
+        )
+        == 4
+    )
+
+
+async def test_service_rolls_back_new_snapshot_when_calculation_insert_fails(
+    database: AsyncConnection,
+):
+    provider = FakeBondProvider()
+    service = calculation_service(database, provider)
+    missing_user_id = uuid.uuid4()
+    lines = [TradeRequest(uuid.uuid4(), "RU000A10D4Y2", 1)]
+
+    with pytest.raises(IntegrityError):
+        await service.calculate(
+            missing_user_id,
+            lines,
+            last_trading_date=date(2026, 10, 23),
+        )
+
+    assert provider.calls == ["RU000A10D4Y2"]
+    assert await database.scalar(text("SELECT COUNT(*) FROM instrument_snapshots")) == 0
+    assert await database.scalar(text("SELECT COUNT(*) FROM calculations")) == 0
+    assert await database.scalar(text("SELECT COUNT(*) FROM calculation_trades")) == 0

@@ -10,6 +10,10 @@ class InvalidQuantityError(DomainError):
     """Количество облигаций не является допустимым целым числом"""
 
 
+class InvalidCalculationError(DomainError):
+    """Набор строк расчёта некорректен"""
+
+
 class MarketDataError(DomainError):
     """Не удалось получить пригодные рыночные данные"""
 
