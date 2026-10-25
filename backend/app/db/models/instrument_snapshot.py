@@ -5,7 +5,6 @@ from decimal import Decimal
 from sqlalchemy import (
     CHAR,
     CheckConstraint,
-    Computed,
     Date,
     DateTime,
     Numeric,
@@ -17,15 +16,6 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
-
-# Полная (грязная) цена одной бумаги в валюте:
-# цена в процентах переводим в деньги через непогашенный номинал, к чистой цене добавляем НКД.
-DIRTY_PRICE_SQL = (
-    "CASE WHEN quote_kind = 'percent' THEN quote_value * nominal_per_bond / 100"
-    " ELSE quote_value END"
-    " + CASE WHEN price_type = 'clean' THEN accrued_per_bond ELSE 0 END"
-)
-
 
 class InstrumentSnapshot(Base):
     """Неизменяемый снимок бумаги, который может использоваться несколькими расчётами"""
@@ -87,10 +77,6 @@ class InstrumentSnapshot(Base):
     quote_kind: Mapped[str] = mapped_column(String(20))
     quote_value: Mapped[Decimal] = mapped_column(Numeric)
     accrued_per_bond: Mapped[Decimal | None] = mapped_column(Numeric)
-    dirty_price_per_bond: Mapped[Decimal] = mapped_column(
-        Numeric, Computed(DIRTY_PRICE_SQL, persisted=True)
-    )
-
     coupon_type: Mapped[str] = mapped_column(String(20))
     coupon_frequency: Mapped[int | None] = mapped_column(SmallInteger)
     modified_duration: Mapped[Decimal | None] = mapped_column(Numeric)

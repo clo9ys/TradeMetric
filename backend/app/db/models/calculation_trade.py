@@ -18,7 +18,7 @@ class CalculationTrade(Base):
     __table_args__ = (
         UniqueConstraint("calculation_id", "client_trade_id"),
         UniqueConstraint("calculation_id", "line_number"),
-        CheckConstraint("quantity > 0", name="quantity_positive"),
+        CheckConstraint("quantity <> 0", name="quantity_nonzero"),
         CheckConstraint("line_number > 0", name="line_number_positive"),
     )
 
