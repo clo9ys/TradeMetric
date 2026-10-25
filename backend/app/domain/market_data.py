@@ -112,7 +112,7 @@ class NormalizedBondData:
             raise IncompleteMarketDataError("Время риск-параметров требует даты")
 
     def validate_freshness(self, *, calculation_date: date, last_trading_date: date) -> None:
-        """Проверка свежести данных"""
+        """Проверяет даты котировки и риска относительно последнего торгового дня"""
         self._require_date("calculation_date", calculation_date)
         self._require_date("last_trading_date", last_trading_date)
         if last_trading_date > calculation_date:
@@ -126,6 +126,7 @@ class NormalizedBondData:
 
     @staticmethod
     def _require_decimal(name: str, value: object, *, positive: bool = False) -> None:
+        """Проверяет тип, конечность и при необходимости положительность числа"""
         if not isinstance(value, Decimal) or not value.is_finite():
             raise IncompleteMarketDataError(f"{name} должен быть конечным Decimal")
         if positive and value <= 0:
@@ -133,10 +134,12 @@ class NormalizedBondData:
 
     @staticmethod
     def _require_date(name: str, value: object) -> None:
+        """Проверяет, что значение является датой без времени"""
         if type(value) is not date:
             raise IncompleteMarketDataError(f"{name} должен быть датой")
 
     @staticmethod
     def _require_aware_datetime(name: str, value: object) -> None:
+        """Проверяет наличие часового пояса у даты и времени"""
         if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
             raise IncompleteMarketDataError(f"{name} должен содержать часовой пояс")

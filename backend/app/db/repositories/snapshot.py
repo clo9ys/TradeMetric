@@ -14,6 +14,7 @@ class SnapshotRepository:
         self._session = session
 
     async def get_fetched_on_date(self, isins: Sequence[str], calculation_date: date) -> list[InstrumentSnapshot]:
+        """Ищет снимки, загруженные в дату расчёта по Москве, начиная с новых"""
         if not isins:
             return []
         statement = (
@@ -29,5 +30,6 @@ class SnapshotRepository:
         return list(result)
 
     async def add_many(self, snapshots: Sequence[InstrumentSnapshot]) -> None:
+        """Добавляет снимки и получает их идентификаторы через flush"""
         self._session.add_all(snapshots)
         await self._session.flush()

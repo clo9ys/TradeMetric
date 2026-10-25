@@ -15,11 +15,14 @@ MOSCOW = timezone(timedelta(hours=3))
 
 @dataclass(frozen=True, slots=True)
 class PreparedMarketData:
+    """Найденные снимки и новые снимки, ещё не записанные в БД"""
+
     snapshots: dict[str, InstrumentSnapshot]
     new_snapshots: tuple[InstrumentSnapshot, ...]
 
 
 def snapshot_to_data(snapshot: InstrumentSnapshot) -> NormalizedBondData:
+    """Преобразует снимок БД в проверенную доменную модель"""
     try:
         source = MarketDataSource(snapshot.source)
         quote_kind = QuoteKind(snapshot.quote_kind)
@@ -56,6 +59,7 @@ def snapshot_to_data(snapshot: InstrumentSnapshot) -> NormalizedBondData:
 
 
 def _to_snapshot(data: NormalizedBondData) -> InstrumentSnapshot:
+    """Подготавливает запись БД из нормализованных данных поставщика"""
     return InstrumentSnapshot(
         isin=data.isin,
         source=data.source.value,
@@ -83,6 +87,8 @@ def _to_snapshot(data: NormalizedBondData) -> InstrumentSnapshot:
 
 
 class MarketDataService:
+    """Выбирает свежие снимки из кэша или загружает их из Cbonds"""
+
     def __init__(self, uow: UnitOfWork, cbonds: BondDataProvider) -> None:
         self._uow = uow
         self._cbonds = cbonds
@@ -94,6 +100,7 @@ class MarketDataService:
         calculation_date: date,
         last_trading_date: date,
     ) -> dict[str, InstrumentSnapshot]:
+        """Находит снимки и отдельно сохраняет новые для самостоятельных вызовов"""
         prepared = await self.prepare_snapshots(
             isins,
             calculation_date=calculation_date,
@@ -112,6 +119,7 @@ class MarketDataService:
         calculation_date: date,
         last_trading_date: date,
     ) -> PreparedMarketData:
+        """Получает уникальные ISIN без записи; новые снимки вернёт вызывающему коду"""
         unique_isins = list(dict.fromkeys(validate_isin(isin) for isin in isins))
         if not unique_isins:
             return PreparedMarketData({}, ())

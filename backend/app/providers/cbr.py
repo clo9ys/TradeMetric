@@ -16,6 +16,8 @@ CBR_DAILY_URL = "https://www.cbr.ru/scripts/XML_daily.asp"
 
 
 class CBRRateAdapter:
+    """Получает официальный курс валюты из XML-сервиса Банка России"""
+
     def __init__(
         self,
         *,
@@ -30,9 +32,11 @@ class CBRRateAdapter:
 
     @classmethod
     def from_settings(cls, settings: "Settings") -> "CBRRateAdapter":
+        """Создаёт адаптер с таймаутом из настроек"""
         return cls(timeout_seconds=settings.provider_timeout_seconds)
 
     async def get_rate(self, currency: str, calculation_date: date) -> FXRate:
+        """Возвращает курс за одну единицу валюты, действующий на дату расчёта"""
         if currency == "RUB":
             return FXRate(Decimal(1), calculation_date, "CBR")
 

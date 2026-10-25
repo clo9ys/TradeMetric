@@ -4,4 +4,8 @@ from app.domain.market_data import NormalizedBondData
 
 
 class BondDataProvider(Protocol):
-    async def get_bond(self, isin: str) -> NormalizedBondData: ...
+    """Общий контракт для адаптеров рыночных данных"""
+
+    async def get_bond(self, isin: str) -> NormalizedBondData:
+        """Возвращает полный нормализованный снимок по ISIN"""
+        ...

@@ -8,6 +8,7 @@ from app.domain.errors import IncompleteMarketDataError, ProviderUnavailableErro
 
 @asynccontextmanager
 async def provider_client( client: httpx.AsyncClient | None, timeout_seconds: float) -> AsyncIterator[httpx.AsyncClient]:
+    """Использует переданный HTTP-клиент или временно создаёт свой"""
     if client is not None:
         yield client
     else:
@@ -18,6 +19,7 @@ async def provider_client( client: httpx.AsyncClient | None, timeout_seconds: fl
 async def post_json(
     client: httpx.AsyncClient, url: str, payload: dict[str, object], *, headers: dict[str, str] | None = None,
 ) -> object:
+    """Отправляет JSON и переводит сетевые ошибки в ошибки домена"""
     try:
         response = await client.post(url, json=payload, headers=headers)
     except (httpx.TimeoutException, httpx.RequestError) as error:

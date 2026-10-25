@@ -33,6 +33,7 @@ def _items(response: object) -> list[dict[str, object]]:
 
 
 def _decimal(value: object, field: str) -> Decimal:
+    """Преобразует обязательное числовое поле без потери точности"""
     if value is None or value == "":
         raise IncompleteMarketDataError(f"Cbonds не вернул {field}")
     try:
@@ -71,6 +72,7 @@ def normalize_cbonds(
     *,
     fetched_at: datetime,
 ) -> NormalizedBondData:
+    """Собирает полный снимок из выпуска и торговой записи одного ISIN"""
     if emission.get("isin_code") != isin or trading.get("isin_code") != isin:
         raise IncompleteMarketDataError("Cbonds вернул данные другого ISIN")
     if str(trading.get("emission_id")) != str(emission.get("id")):
@@ -124,6 +126,8 @@ def normalize_cbonds(
 
 
 class CbondsAdapter:
+    """Получает выпуск и котировку Cbonds для одного ISIN"""
+
     def __init__(
         self,
         *,
@@ -141,6 +145,7 @@ class CbondsAdapter:
 
     @classmethod
     def from_settings(cls, settings: "Settings") -> "CbondsAdapter":
+        """Создаёт адаптер с доступами и таймаутом из настроек"""
         return cls(
             login=settings.cbonds_login,
             password=settings.cbonds_password,
@@ -148,6 +153,7 @@ class CbondsAdapter:
         )
 
     async def get_bond(self, isin: str) -> NormalizedBondData:
+        """Запрашивает и возвращает полный снимок последней даты торгов"""
         isin = validate_isin(isin)
         if not self._login or not self._password:
             raise ProviderUnavailableError("Доступ Cbonds не настроен")

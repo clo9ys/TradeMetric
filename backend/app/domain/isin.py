@@ -6,6 +6,7 @@ ISIN_PATTERN = re.compile(r"[A-Z]{2}[A-Z0-9]{9}[0-9]\Z")
 
 
 def validate_isin(value: str) -> str:
+    """Нормализует ISIN и проверяет формат и контрольную цифру"""
     if not isinstance(value, str):
         raise InvalidISINError("ISIN должен быть строкой")
 

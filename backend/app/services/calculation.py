@@ -23,6 +23,8 @@ RATE_SHIFT = Decimal("0.0001")
 
 @dataclass(frozen=True, slots=True)
 class TradeMetrics:
+    """Денежные и риск-показатели одной строки расчёта"""
+
     dirty_price_per_bond: Decimal
     current_fair_value_rub: Decimal
     duration_used: Decimal
@@ -33,6 +35,7 @@ class TradeMetrics:
 def calculate_trade_metrics(
     bond: NormalizedBondData, quantity: int, fx_rate: Decimal
 ) -> TradeMetrics:
+    """Считает грязную цену, стоимость позиции и DV01 одной строки"""
     validate_quantity(quantity)
     if not isinstance(fx_rate, Decimal) or not fx_rate.is_finite() or fx_rate <= 0:
         raise FXRateUnavailableError("Курс к рублю должен быть положительным Decimal")
@@ -70,11 +73,14 @@ def calculate_trade_metrics(
 
 
 def calculate_total_dv01(trades: Sequence[TradeMetrics]) -> Decimal:
+    """Складывает DV01 строк алгебраически без промежуточного округления"""
     return sum((trade.dv01_rub for trade in trades), Decimal(0))
 
 
 @dataclass(frozen=True, slots=True)
 class TradeRequest:
+    """Входная строка: идентификатор, ISIN и количество со знаком"""
+
     client_trade_id: uuid.UUID
     isin: str
     quantity: int
@@ -82,6 +88,8 @@ class TradeRequest:
 
 @dataclass(frozen=True, slots=True)
 class CalculatedTrade:
+    """Сохранённая строка с использованным снимком, курсом и результатом"""
+
     id: uuid.UUID
     client_trade_id: uuid.UUID
     line_number: int
@@ -95,6 +103,8 @@ class CalculatedTrade:
 
 @dataclass(frozen=True, slots=True)
 class CalculationResult:
+    """Итог расчёта вместе с результатами отдельных строк"""
+
     id: uuid.UUID
     user_id: uuid.UUID
     calculated_at: datetime
@@ -103,6 +113,8 @@ class CalculationResult:
 
 
 class CalculationService:
+    """Считает строки до транзакции и атомарно сохраняет весь расчёт"""
+
     def __init__(
         self,
         uow: UnitOfWork,
@@ -123,6 +135,7 @@ class CalculationService:
         *,
         last_trading_date: date,
     ) -> CalculationResult:
+        """Проверяет строки, получает снимки и курсы, считает и сохраняет результат"""
         
         if not isinstance(user_id, uuid.UUID):
             raise InvalidCalculationError("Не указан пользователь расчёта")
