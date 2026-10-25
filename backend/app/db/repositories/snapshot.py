@@ -29,6 +29,5 @@ class SnapshotRepository:
         return list(result)
 
     async def add_many(self, snapshots: Sequence[InstrumentSnapshot]) -> None:
-        # после flush у снимков есть id и посчитанная базой dirty_price_per_bond
         self._session.add_all(snapshots)
         await self._session.flush()
