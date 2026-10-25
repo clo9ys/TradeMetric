@@ -12,7 +12,7 @@ from app.providers.base import BondDataProvider
 MOSCOW = timezone(timedelta(hours=3))
 
 
-def _from_snapshot(snapshot: InstrumentSnapshot) -> NormalizedBondData:
+def snapshot_to_data(snapshot: InstrumentSnapshot) -> NormalizedBondData:
     try:
         source = MarketDataSource(snapshot.source)
         quote_kind = QuoteKind(snapshot.quote_kind)
@@ -99,7 +99,7 @@ class MarketDataService:
             if snapshot.isin in resolved:
                 continue
             try:
-                data = _from_snapshot(snapshot)
+                data = snapshot_to_data(snapshot)
                 data.validate_freshness(
                     calculation_date=calculation_date,
                     last_trading_date=last_trading_date,
