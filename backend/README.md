@@ -53,6 +53,26 @@ uv run alembic revision --autogenerate --rev-id 0002 -m "dv01 function"
 - autogenerate видит только таблицы из моделей. SQL-функции и VIEW пишем руками через `op.execute(...)`, в `downgrade` не забываем `DROP`
 - сгенерированный файл всегда читаем глазами перед коммитом
 
+## Первый пользователь
+
+Регистрации нет, аккаунты заводим скриптом из `backend/`:
+
+```
+uv run python -m scripts.create_user max@example.com
+```
+
+Пароль скрипт спросит сам, дважды, не короче 8 символов. Email приводится к нижнему регистру
+
+## Запуск сервера
+
+```
+uv run uvicorn app.main:app --reload
+```
+
+Документация API: http://127.0.0.1:8000/docs, проверка базы: `GET /api/health`
+
+Вход работает через cookie сессии. В `/docs` после `POST /api/auth/login` браузер сохранит её сам. Для `POST`-запросов, кроме логина, нужен заголовок `X-CSRF-Token`: его значение приходит в ответе `login` и `me`
+
 ## Тесты и линтер
 
 ```
