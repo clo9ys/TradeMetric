@@ -1,0 +1,73 @@
+# TradeMetric: бэкенд
+
+FastAPI, SQLAlchemy 2 (async), Alembic, PostgreSQL 16. Python 3.12, зависимости ставим через uv
+
+## Установка
+
+```
+cd backend
+uv sync
+```
+
+Настройки лежат в `.env` в **корне репо**, не в `backend/`. Шаблон рядом:
+
+```
+cp .env.example .env
+```
+
+Нужен запущенный Postgres. docker-compose скоро появится, а пока подойдёт любой Postgres 16, доступы к нему прописываются в `.env`
+
+## Миграции
+
+Все команды из `backend/`
+
+```
+uv run alembic upgrade head      # накатить всё
+uv run alembic downgrade -1      # откатить последнюю
+uv run alembic check             # совпадают ли модели с базой
+```
+
+Новая миграция:
+
+```
+uv run alembic revision --autogenerate --rev-id 0002 -m "dv01 function"
+```
+
+- номера идут по порядку: 0001, 0002, ..., в `down_revision` стоит номер предыдущей
+- autogenerate видит только таблицы из моделей. SQL-функции и VIEW пишем руками через `op.execute(...)`, в `downgrade` не забываем `DROP`
+- сгенерированный файл всегда читаем глазами перед коммитом
+
+## Тесты и линтер
+
+```
+uv run pytest
+uv run ruff format . && uv run ruff check --fix .
+```
+
+## Что где лежит
+
+```
+app/
+  config.py         настройки из .env
+  security.py       Argon2, токены сессии и CSRF
+  db/models/        таблицы по ER-схеме
+  db/repositories/  запросы к базе
+  db/uow.py         UnitOfWork: одна транзакция на одну операцию
+  services/         бизнес-логика
+  api/              роуты и pydantic-схемы
+migrations/         миграции Alembic
+tests/              unit, integration, fixtures
+```
+
+## Работа с базой из сервиса
+
+Сервис получает `UnitOfWork` в конструкторе и открывает его на каждую операцию:
+
+```python
+async with self._uow as uow:
+    user = await uow.users.get_by_email(email)
+    ...
+    await uow.commit()
+```
+
+Без `commit()` всё откатывается при выходе из блока. Репозитории внутри: `uow.users`, `uow.auth_sessions`, `uow.snapshots`, `uow.calculations`
