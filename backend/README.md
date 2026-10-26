@@ -15,7 +15,23 @@ uv sync
 cp .env.example .env
 ```
 
-Нужен запущенный Postgres. docker-compose скоро появится, а пока подойдёт любой Postgres 16, доступы к нему прописываются в `.env`
+## База в Docker
+
+Postgres поднимается через docker compose, все команды из **корня репо**. Логин, пароль и имя базы он берёт из того же `.env`
+
+```
+docker compose up -d        # поднять в фоне
+docker compose ps           # в STATUS должно быть healthy
+docker compose logs db      # если что-то не так
+docker compose stop         # остановить, данные остаются
+docker compose down -v      # снести вместе с данными, база будет пустой
+```
+
+После первого запуска или `down -v` накатываем миграции из `backend/`: `uv run alembic upgrade head`
+
+Зайти в psql: `docker compose exec db psql -U <POSTGRES_USER> -d <POSTGRES_DB>`
+
+Если порт 5432 занят своим Postgres на машине, поменяй порт слева в `ports` в `docker-compose.yml` и `POSTGRES_PORT` в `.env`
 
 ## Миграции
 
