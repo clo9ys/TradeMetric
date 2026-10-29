@@ -23,3 +23,4 @@ class MarketDataSource(str, Enum):
     """Поставщик рыночного снимка"""
     CBONDS = "cbonds"
     RUDATA = "rudata"
+    DEMO = "demo"

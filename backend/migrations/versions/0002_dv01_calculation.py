@@ -18,19 +18,19 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     op.drop_column("instrument_snapshots", "dirty_price_per_bond")
     op.drop_constraint(
-        "ck_calculation_trades_quantity_positive", "calculation_trades", type_="check"
+        op.f("ck_calculation_trades_quantity_positive"), "calculation_trades", type_="check"
     )
     op.create_check_constraint(
-        "ck_calculation_trades_quantity_nonzero", "calculation_trades", "quantity <> 0"
+        op.f("ck_calculation_trades_quantity_nonzero"), "calculation_trades", "quantity <> 0"
     )
 
 
 def downgrade() -> None:
     op.drop_constraint(
-        "ck_calculation_trades_quantity_nonzero", "calculation_trades", type_="check"
+        op.f("ck_calculation_trades_quantity_nonzero"), "calculation_trades", type_="check"
     )
     op.create_check_constraint(
-        "ck_calculation_trades_quantity_positive", "calculation_trades", "quantity > 0"
+        op.f("ck_calculation_trades_quantity_positive"), "calculation_trades", "quantity > 0"
     )
     op.add_column(
         "instrument_snapshots",

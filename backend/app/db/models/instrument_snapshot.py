@@ -24,7 +24,7 @@ class InstrumentSnapshot(Base):
     __table_args__ = (
         CheckConstraint("isin ~ '^[A-Z]{2}[A-Z0-9]{9}[0-9]$'", name="isin_format"),
         CheckConstraint("currency ~ '^[A-Z]{3}$'", name="currency_format"),
-        CheckConstraint("source IN ('cbonds', 'rudata')", name="source"),
+        CheckConstraint("source IN ('cbonds', 'rudata', 'demo')", name="source"),
         CheckConstraint("price_type IN ('clean', 'dirty')", name="price_type"),
         CheckConstraint("quote_kind IN ('percent', 'amount')", name="quote_kind"),
         CheckConstraint("coupon_type IN ('fixed', 'floating')", name="coupon_type"),
