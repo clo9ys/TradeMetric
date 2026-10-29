@@ -1,6 +1,6 @@
 .trade-table-scroll { position: relative; overflow-x: auto; }
 .trade-table { width: 100%; min-width: 57.5rem; table-layout: fixed; border-collapse: collapse; text-align: left; }
-.col-number { width: 7.2%; } .col-isin { width: 24.7%; } .col-name { width: 23.9%; } .col-currency { width: 10.4%; } .col-type { width: 17.1%; } .col-quantity { width: 13%; } .col-delete { width: 3.7%; }
+.col-number { width: 7.2%; } .col-isin { width: 24.7%; } .col-name { width: 23.9%; } .col-currency { width: 10.4%; } .col-issuer { width: 17.1%; } .col-quantity { width: 13%; } .col-delete { width: 3.7%; }
 .trade-table th { height: 4.75rem; font-size: 1.25rem; font-weight: 700; padding: 0 1rem 0 0; border-bottom: 1px solid var(--color-divider); }
 .trade-table th:first-child, .row-number { padding: 0 0 0 2.125rem; }
 .trade-table td { height: 5.5rem; border-bottom: 1px solid var(--color-divider); padding-right: 1.75rem; font-size: 1rem; font-weight: 600; }

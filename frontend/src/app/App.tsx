@@ -32,7 +32,7 @@ export function App() {
     <div hidden={page === 'login'}>
       <WorkspaceLayout page={page} currency={currency} onCurrencyChange={setCurrency}>
         <div hidden={page !== 'new'}><NewSessionPage /></div>
-        <div hidden={page !== 'history'}><HistoryPage /></div>
+        <div hidden={page !== 'history'}><HistoryPage active={page === 'history'} /></div>
       </WorkspaceLayout>
     </div>
   </>;

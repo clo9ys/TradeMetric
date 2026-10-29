@@ -15,4 +15,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .button-secondary { color: var(--color-accent); background: var(--color-surface); border-color: var(--color-accent); }
 .button-secondary:hover:not(:disabled) { background: var(--color-input); }
 .status-message { margin: 1rem 0 0; font-size: .9375rem; line-height: 1.6; }
+.status-error, .trade-field-error { color: var(--color-error); }
+.trade-field-error { display: block; margin-top: .25rem; font-size: .75rem; line-height: 1.35; }
+.trade-input[aria-invalid="true"] { border-color: var(--color-error); }
 @media (max-width: 760px) { :root { font-size: 14px; } }

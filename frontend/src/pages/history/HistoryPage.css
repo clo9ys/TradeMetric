@@ -1,0 +1,7 @@
+.history-page > h1 { color: var(--color-heading); font-size: 1.5rem; margin: 1.25rem 0 .25rem; }
+.history-page > p { margin: .5rem 0 1rem; }
+.history-list { display: flex; gap: .75rem; overflow-x: auto; padding: .25rem 0 1rem; }
+.history-item { min-width: 15rem; display: grid; gap: .35rem; text-align: left; padding: .85rem 1rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: .6rem; color: var(--color-text); }
+.history-item strong { color: var(--color-heading); }
+.history-item-selected { border-color: var(--color-primary); box-shadow: 0 0 0 1px var(--color-primary); }
+.history-detail { margin-top: .25rem; }
