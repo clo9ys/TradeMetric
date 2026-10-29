@@ -1,3 +1,4 @@
+import { RequestState } from '../../components/request-state/RequestState';
 import { SessionNameEditor } from '../../components/session-name/SessionNameEditor';
 import { DEFAULT_SESSION_NAME } from '../../utils/sessionNames';
 import { SessionPanel } from '../../components/session-panel/SessionPanel';
@@ -10,10 +11,11 @@ interface Props {
   onSelect: (id: string) => void;
   loading: boolean;
   error: string;
+  onRetry: () => void;
   onRename: (id: string, name: string) => void;
 }
 
-export function HistoryPage({ calculations, selectedId, onSelect, loading, error, onRename }: Props) {
+export function HistoryPage({ calculations, selectedId, onSelect, loading, error, onRename, onRetry }: Props) {
   const selected = calculations.find(item => item.calculation_id === selectedId);
   const rows: TradeRow[] = selected?.trades.map((trade, index) => ({
     id: `${selected.calculation_id}-${index}`, isin: trade.isin, quantity: String(trade.quantity),
@@ -25,9 +27,9 @@ export function HistoryPage({ calculations, selectedId, onSelect, loading, error
 
   return <section className="history-page" aria-label="История сессий">
     <h1>История расчётов</h1>
-    {loading && <p role="status">Загружаем историю…</p>}
-    {error && <p className="status-error" role="alert">{error}</p>}
-    {!loading && !error && calculations.length === 0 && <p>Сохранённых расчётов пока нет. Выполните расчёт на вкладке «Новая сессия».</p>}
+    {loading && <RequestState kind="loading" compact={calculations.length > 0} title={calculations.length ? 'Обновляем историю…' : 'Загружаем историю…'} />}
+    {!loading && error && <RequestState kind="error" compact={calculations.length > 0} title="Не удалось обновить историю" onRetry={onRetry}>{calculations.length ? 'Показываем ранее загруженные сессии. Попробуйте ещё раз.' : 'Проверьте соединение и попробуйте ещё раз.'}</RequestState>}
+    {!loading && !error && calculations.length === 0 && <RequestState kind="empty" title="Здесь появятся ваши сессии" action={<a className="request-state-action" href="#new">Создать сессию</a>}>Выполните первый расчёт, чтобы сохранить сделки и результаты в истории.</RequestState>}
     {calculations.length > 0 && <div className="history-list" aria-label="Сохранённые расчёты">
       {calculations.map(item => <button type="button" key={item.calculation_id}
         className={`history-item ${item.calculation_id === selectedId ? 'history-item-selected' : ''}`}

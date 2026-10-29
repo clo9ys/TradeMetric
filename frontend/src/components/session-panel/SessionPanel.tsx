@@ -14,6 +14,7 @@ interface Props {
   onCalculate?: () => void;
   onLoadDemo?: () => void;
   calculating?: boolean;
+  calculateDisabled?: boolean;
   instruments?: Record<string, DemoInstrument>;
   result?: DemoCalculationResult | null;
   message?: ReactNode;
@@ -22,17 +23,17 @@ interface Props {
   onFieldBlur?: (id: string) => void;
 }
 
-export function SessionPanel({ rows, readOnly = false, onChange, onRemove, onAdd, onCalculate, onLoadDemo, calculating = false, instruments, result, message, error = false, rowErrors, onFieldBlur }: Props) {
+export function SessionPanel({ rows, readOnly = false, onChange, onRemove, onAdd, onCalculate, onLoadDemo, calculating = false, calculateDisabled = false, instruments, result, message, error = false, rowErrors, onFieldBlur }: Props) {
   return <>
     {message && <p className={`status-message ${error ? 'status-error' : ''}`} role={error ? 'alert' : 'status'}>{message}</p>}
-    <section className="session-panel" aria-label={readOnly ? 'Сохранённая сессия' : 'Ввод сделок'}>
-      <TradeTable rows={rows} readOnly={readOnly} onChange={onChange} onRemove={onRemove} instruments={instruments} errors={rowErrors} onFieldBlur={onFieldBlur} />
+    <section className="session-panel" aria-busy={calculating} aria-label={readOnly ? 'Сохранённая сессия' : 'Ввод сделок'}>
+      <fieldset className="trade-fields" disabled={calculating}><TradeTable rows={rows} readOnly={readOnly} onChange={onChange} onRemove={onRemove} instruments={instruments} errors={rowErrors} onFieldBlur={onFieldBlur} /></fieldset>
       {!readOnly && <div className="session-actions">
         <div className="session-action-group">
           <button type="button" className="button button-secondary" disabled={readOnly || calculating} onClick={onAdd}><PlusIcon />Добавить</button>
           {onLoadDemo && <button type="button" className="button button-secondary" disabled={readOnly || calculating} onClick={onLoadDemo}>Загрузить демо</button>}
         </div>
-        <button type="button" className="button button-primary calculate-button" disabled={readOnly || calculating} onClick={onCalculate}>{calculating ? 'Расчёт…' : 'Рассчитать'}<ArrowIcon /></button>
+        <button type="button" className="button button-primary calculate-button" disabled={readOnly || calculating || calculateDisabled} onClick={onCalculate}>{calculating ? 'Расчёт…' : 'Рассчитать'}<ArrowIcon /></button>
       </div>}
     </section>
     <ResultsCards result={result} />

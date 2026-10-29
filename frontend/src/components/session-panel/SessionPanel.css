@@ -3,3 +3,5 @@
 .calculate-button { width: 19.3125rem; }
 .session-action-group { display: flex; gap: .75rem; flex-wrap: wrap; }
 @media (max-width: 760px) { .session-actions { flex-wrap: wrap; padding: 1rem; } .session-actions .button { flex: 1; white-space: nowrap; } }
+.trade-fields { margin: 0; padding: 0; min-width: 0; border: 0; }
+.session-actions .button:disabled { opacity: .55; }

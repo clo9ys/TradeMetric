@@ -1,3 +1,4 @@
+import { RequestState } from '../../components/request-state/RequestState';
 import { useEffect, useState } from 'react';
 import { DEFAULT_SESSION_NAME, SESSION_NAME_LIMIT } from '../../utils/sessionNames';
 import '../../components/session-name/SessionNameEditor.css';
@@ -10,7 +11,7 @@ function validateRow(row: TradeRow, instruments: Record<string, DemoInstrument>)
   const error: TradeRowError = {};
   if (!/^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(row.isin)) {
     error.isin = 'ISIN должен содержать 12 символов: две буквы, девять знаков и контрольную цифру.';
-  } else if (!instruments[row.isin]) {
+  } else if (Object.keys(instruments).length > 0 && !instruments[row.isin]) {
     error.isin = 'Этот ISIN отсутствует в списке доступных инструментов.';
   }
   if (!/^-?\d+$/.test(row.quantity) || Number(row.quantity) === 0 || !Number.isSafeInteger(Number(row.quantity))) {
@@ -25,6 +26,10 @@ export function NewSessionPage({ onCalculated }: { onCalculated: (id: string, na
   const [message, setMessage] = useState('');
   const [result, setResult] = useState<DemoCalculationResult | null>(null);
   const [instruments, setInstruments] = useState<Record<string, DemoInstrument>>({});
+  const [instrumentsLoading, setInstrumentsLoading] = useState(true);
+  const [instrumentsError, setInstrumentsError] = useState('');
+  const [instrumentsRevision, setInstrumentsRevision] = useState(0);
+  const [calculationError, setCalculationError] = useState('');
   const [calculating, setCalculating] = useState(false);
   const [error, setError] = useState(false);
   const [touchedRows, setTouchedRows] = useState<Set<string>>(new Set());
@@ -33,29 +38,34 @@ export function NewSessionPage({ onCalculated }: { onCalculated: (id: string, na
 
   useEffect(() => {
     const controller = new AbortController();
+    setInstrumentsLoading(true);
+    setInstrumentsError('');
     fetch('/api/demo/instruments', { signal: controller.signal })
       .then(async response => {
         if (!response.ok) throw new Error('Не удалось загрузить инструменты. Попробуйте обновить страницу позже.');
         return response.json() as Promise<{ instruments: DemoInstrument[] }>;
       })
       .then(data => {
+        if (controller.signal.aborted) return;
         setInstruments(Object.fromEntries(data.instruments.map(item => [item.isin, item])));
-        if (data.instruments.length === 0) { setMessage('Доступные инструменты пока не найдены.'); setError(true); }
       })
-      .catch(error => {
-        if (error instanceof Error && error.name !== 'AbortError') { setMessage(error.message); setError(true); }
-      });
+      .catch(() => {
+        if (!controller.signal.aborted) setInstrumentsError('Не удалось загрузить доступные инструменты.');
+      })
+      .finally(() => { if (!controller.signal.aborted) setInstrumentsLoading(false); });
     return () => controller.abort();
-  }, []);
+  }, [instrumentsRevision]);
 
   function updateRow(id: string, field: 'isin' | 'quantity', value: string) {
     setRows(previous => previous.map(row => row.id === id ? { ...row, [field]: value } : row));
     setResult(null);
+    setCalculationError('');
     setMessage('');
     setError(false);
   }
 
   function loadDemo() {
+    setCalculationError('');
     setRows(Object.values(instruments).map(instrument => ({
       id: crypto.randomUUID(), isin: instrument.isin, quantity: String(instrument.default_quantity),
     })));
@@ -67,6 +77,8 @@ export function NewSessionPage({ onCalculated }: { onCalculated: (id: string, na
   }
 
   async function calculate() {
+    if (calculating || instrumentsLoading || instrumentsError || !Object.keys(instruments).length) return;
+    setCalculationError('');
     setValidationRequested(true);
     const enteredRows = rows.filter(row => row.isin || row.quantity);
     if (enteredRows.length === 0) {
@@ -96,8 +108,7 @@ export function NewSessionPage({ onCalculated }: { onCalculated: (id: string, na
       setMessage('');
     } catch (error) {
       setResult(null);
-      setError(true);
-      setMessage(error instanceof Error ? error.message : 'Ошибка соединения с сервером');
+      setCalculationError(error instanceof TypeError || error instanceof SyntaxError ? 'Сервис временно недоступен. Проверьте соединение и попробуйте ещё раз.' : error instanceof Error ? error.message : 'Не удалось выполнить расчёт.');
     } finally {
       setCalculating(false);
     }
@@ -105,12 +116,17 @@ export function NewSessionPage({ onCalculated }: { onCalculated: (id: string, na
 
   return <section aria-label="Новая сессия">
     <div className="session-name-form"><label htmlFor="new-session-name">Название сессии</label><div className="session-name-controls"><input id="new-session-name" value={name} disabled={calculating} maxLength={SESSION_NAME_LIMIT} placeholder={DEFAULT_SESSION_NAME} onChange={event => setName(event.target.value)} /></div><span className="session-name-hint">Например, «Портфель ОФЗ». Название сохраняется в этом браузере.</span></div>
+    {instrumentsLoading && <RequestState kind="loading" compact title="Загружаем инструменты…">Введённые сделки останутся в таблице.</RequestState>}
+    {!instrumentsLoading && instrumentsError && <RequestState kind="error" compact title="Инструменты недоступны" onRetry={() => setInstrumentsRevision(value => value + 1)}>Проверьте соединение и повторите загрузку. Введённые сделки остаются в таблице.</RequestState>}
+    {!instrumentsLoading && !instrumentsError && !Object.keys(instruments).length && <RequestState kind="empty" compact title="Нет доступных инструментов" onRetry={() => setInstrumentsRevision(value => value + 1)}>Попробуйте обновить список позже.</RequestState>}
+    {calculationError && <RequestState kind="error" compact title="Не удалось выполнить расчёт" onRetry={() => void calculate()}>{calculationError}</RequestState>}
+    {calculating && <RequestState kind="loading" compact title="Выполняем расчёт…">Получаем результаты по вашим сделкам.</RequestState>}
     <SessionPanel
       rows={rows} onChange={updateRow}
-      onAdd={() => { setRows(previous => [...previous, createEmptyTrade()]); setResult(null); setMessage(''); setError(false); }}
-      onRemove={id => { setRows(previous => previous.filter(row => row.id !== id)); setResult(null); setMessage(''); setError(false); }}
+      onAdd={() => { setRows(previous => [...previous, createEmptyTrade()]); setResult(null); setCalculationError(''); setMessage(''); setError(false); }}
+      onRemove={id => { setRows(previous => previous.filter(row => row.id !== id)); setResult(null); setCalculationError(''); setMessage(''); setError(false); }}
       onLoadDemo={Object.keys(instruments).length ? loadDemo : undefined}
-      onCalculate={calculate} calculating={calculating} message={message} error={error}
+      onCalculate={calculate} calculating={calculating} calculateDisabled={instrumentsLoading || Boolean(instrumentsError) || !Object.keys(instruments).length} message={message} error={error}
       rowErrors={rowErrors} onFieldBlur={id => setTouchedRows(previous => new Set(previous).add(id))}
       instruments={instruments} result={result}
     />

@@ -36,6 +36,7 @@ export function App() {
   useEffect(() => {
     const controller = new AbortController();
     setHistoryLoading(true);
+    setHistoryError('');
     fetch('/api/demo/history', { signal: controller.signal })
       .then(async response => {
         if (!response.ok) throw new Error('Не удалось загрузить историю. Попробуйте обновить страницу позже.');
@@ -73,7 +74,7 @@ export function App() {
       <WorkspaceLayout page={page} currency={currency} onCurrencyChange={setCurrency} calculations={namedCalculations} selectedHistoryId={selectedHistoryId} onHistorySelect={setSelectedHistoryId} historyLoading={historyLoading} historyError={historyError}>
         {nameStorageError && <p className="status-error" role="alert">{nameStorageError}</p>}
         <div hidden={page !== 'new'}><NewSessionPage onCalculated={(id, name) => { saveSessionName(id, name); setHistoryRevision(value => value + 1); }} /></div>
-        <div hidden={page !== 'history'}><HistoryPage calculations={namedCalculations} selectedId={selectedHistoryId} onSelect={setSelectedHistoryId} loading={historyLoading} error={historyError} onRename={saveSessionName} /></div>
+        <div hidden={page !== 'history'}><HistoryPage calculations={namedCalculations} selectedId={selectedHistoryId} onSelect={setSelectedHistoryId} loading={historyLoading} error={historyError} onRename={saveSessionName} onRetry={() => setHistoryRevision(value => value + 1)} /></div>
       </WorkspaceLayout>
     </div>
   </>;
