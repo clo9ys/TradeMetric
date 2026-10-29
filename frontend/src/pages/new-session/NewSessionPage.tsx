@@ -1,5 +1,7 @@
 import { RequestState } from '../../components/request-state/RequestState';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { draftFingerprint } from '../../utils/sessionDraft';
+import './NewSessionPage.css';
 import { DEFAULT_SESSION_NAME, SESSION_NAME_LIMIT } from '../../utils/sessionNames';
 import '../../components/session-name/SessionNameEditor.css';
 import { SessionPanel } from '../../components/session-panel/SessionPanel';
@@ -34,6 +36,44 @@ export function NewSessionPage({ onCalculated }: { onCalculated: (id: string, na
   const [error, setError] = useState(false);
   const [touchedRows, setTouchedRows] = useState<Set<string>>(new Set());
   const [validationRequested, setValidationRequested] = useState(false);
+  const [savedFingerprint, setSavedFingerprint] = useState(() => draftFingerprint('', []));
+  const [resetOpen, setResetOpen] = useState(false);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const resetButtonRef = useRef<HTMLButtonElement>(null);
+  const fingerprint = draftFingerprint(name, rows);
+  const hasUnsavedChanges = fingerprint !== savedFingerprint;
+  const canReset = rows.some(row => row.isin || row.quantity) || Boolean(name) || rows.length !== 5 || Boolean(result) || Boolean(message) || Boolean(calculationError) || validationRequested;
+
+  useEffect(() => {
+    if (!hasUnsavedChanges && !calculating) return;
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeLeaving);
+    return () => window.removeEventListener('beforeunload', warnBeforeLeaving);
+  }, [hasUnsavedChanges, calculating]);
+
+  useEffect(() => {
+    if (resetOpen) dialogRef.current?.showModal();
+    else if (dialogRef.current?.open) dialogRef.current.close();
+  }, [resetOpen]);
+
+  function clearDraft() {
+    if (calculating) return;
+    setName('');
+    setRows(createEmptyTrades());
+    setResult(null);
+    setMessage('');
+    setCalculationError('');
+    setError(false);
+    setTouchedRows(new Set());
+    setValidationRequested(false);
+    setSavedFingerprint(draftFingerprint('', []));
+    setResetOpen(false);
+  }
+
   const rowErrors = Object.fromEntries(rows.filter(row => validationRequested || touchedRows.has(row.id)).map(row => [row.id, validateRow(row, instruments)]));
 
   useEffect(() => {
@@ -91,6 +131,7 @@ export function NewSessionPage({ onCalculated }: { onCalculated: (id: string, na
       setError(true);
       return;
     }
+    const submittedFingerprint = fingerprint;
     setCalculating(true);
     setError(false);
     setMessage('');
@@ -104,6 +145,7 @@ export function NewSessionPage({ onCalculated }: { onCalculated: (id: string, na
       if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Ошибка расчёта');
       setResult(data as DemoCalculationResult);
       onCalculated((data as DemoCalculationResult).calculation_id, name);
+      setSavedFingerprint(submittedFingerprint);
       setError(false);
       setMessage('');
     } catch (error) {
@@ -115,7 +157,8 @@ export function NewSessionPage({ onCalculated }: { onCalculated: (id: string, na
   }
 
   return <section aria-label="Новая сессия">
-    <div className="session-name-form"><label htmlFor="new-session-name">Название сессии</label><div className="session-name-controls"><input id="new-session-name" value={name} disabled={calculating} maxLength={SESSION_NAME_LIMIT} placeholder={DEFAULT_SESSION_NAME} onChange={event => setName(event.target.value)} /></div><span className="session-name-hint">Например, «Портфель ОФЗ». Название сохраняется в этом браузере.</span></div>
+    <div className="draft-toolbar"><div className="session-name-form"><label htmlFor="new-session-name">Название сессии</label><div className="session-name-controls"><input ref={nameInputRef} id="new-session-name" value={name} disabled={calculating} maxLength={SESSION_NAME_LIMIT} placeholder={DEFAULT_SESSION_NAME} onChange={event => setName(event.target.value)} /></div><span className="session-name-hint">Например, «Портфель ОФЗ». Название сохраняется в этом браузере.</span></div><button ref={resetButtonRef} type="button" className="clear-draft-button" disabled={calculating || !canReset} onClick={() => setResetOpen(true)}>Очистить сессию</button></div>
+    <p className={`draft-status${hasUnsavedChanges ? ' draft-status-unsaved' : ''}`} role="status">{hasUnsavedChanges ? 'Есть несохранённые изменения. Выполните расчёт, чтобы сохранить сессию.' : result ? 'Сессия сохранена в истории.' : 'Черновик сохраняется при переключении вкладок. После перезагрузки страницы он сбросится.'}</p>
     {instrumentsLoading && <RequestState kind="loading" compact title="Загружаем инструменты…">Введённые сделки останутся в таблице.</RequestState>}
     {!instrumentsLoading && instrumentsError && <RequestState kind="error" compact title="Инструменты недоступны" onRetry={() => setInstrumentsRevision(value => value + 1)}>Проверьте соединение и повторите загрузку. Введённые сделки остаются в таблице.</RequestState>}
     {!instrumentsLoading && !instrumentsError && !Object.keys(instruments).length && <RequestState kind="empty" compact title="Нет доступных инструментов" onRetry={() => setInstrumentsRevision(value => value + 1)}>Попробуйте обновить список позже.</RequestState>}
@@ -130,5 +173,11 @@ export function NewSessionPage({ onCalculated }: { onCalculated: (id: string, na
       rowErrors={rowErrors} onFieldBlur={id => setTouchedRows(previous => new Set(previous).add(id))}
       instruments={instruments} result={result}
     />
+    <dialog ref={dialogRef} className="clear-draft-dialog" aria-labelledby="clear-draft-title" aria-describedby="clear-draft-description"
+      onCancel={() => setResetOpen(false)} onClose={() => { setResetOpen(false); (resetButtonRef.current?.disabled ? nameInputRef.current : resetButtonRef.current)?.focus(); }}>
+      <h2 id="clear-draft-title">Очистить сессию?</h2>
+      <p id="clear-draft-description">Название и все введённые сделки будут сброшены. Сохранённые расчёты останутся в истории.</p>
+      <div className="clear-draft-actions"><button type="button" className="button button-secondary" autoFocus onClick={() => setResetOpen(false)}>Отмена</button><button type="button" className="button button-primary" onClick={clearDraft}>Очистить</button></div>
+    </dialog>
   </section>;
 }
