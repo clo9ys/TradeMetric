@@ -1,0 +1,22 @@
+:root {
+  --color-brand: #0a2896;
+  --color-primary: #0e65f3;
+  --color-primary-border: #145bd1;
+  --color-nav-active: #2346b6;
+  --color-nav-hover: #2b50c2;
+  --color-accent: #6c7bd1;
+  --color-background: #f0f3f7;
+  --color-surface: #fff;
+  --color-text: #63758f;
+  --color-heading: #192e49;
+  --color-sidebar-muted: #7184c2;
+  --color-placeholder: #8c98a7;
+  --color-input: #f6f8fb;
+  --color-border: #dfe5ef;
+  --color-card-border: #e1e1e1;
+  --color-divider: #d3d3d3;
+  --color-skeleton: #f0f0f0;
+  --color-empty: #aaa;
+  --color-error: #e43b40;
+  --sidebar-width: 15.1875rem;
+}
