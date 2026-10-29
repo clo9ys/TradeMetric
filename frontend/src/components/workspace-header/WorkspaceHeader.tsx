@@ -67,6 +67,9 @@ export function WorkspaceHeader({ page, currency, onCurrencyChange }: Props) {
           className="currency-picker-option" role="option" aria-selected={option === currency}
           ref={element => { optionRefs.current[index] = element; }}
           onKeyDown={event => handleOptionKeyDown(event, index)}
+          // Safari может увести фокус в body до click и закрыть список через onBlur.
+          // Сохраняем фокус до выбора, клавиатурная навигация остаётся прежней.
+          onMouseDown={event => { if (event.button === 0) event.preventDefault(); }}
           onClick={() => {
             onCurrencyChange(option);
             setIsOpen(false);
