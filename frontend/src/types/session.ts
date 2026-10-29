@@ -18,6 +18,7 @@ export interface DemoInstrument {
 
 export interface DemoCalculationResult {
   calculation_id: string;
+  title?: string;
   calculated_at?: string;
   source: 'demo';
   currency: 'RUB';

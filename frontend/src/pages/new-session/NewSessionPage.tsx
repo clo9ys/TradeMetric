@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { DEFAULT_SESSION_NAME, SESSION_NAME_LIMIT } from '../../utils/sessionNames';
+import '../../components/session-name/SessionNameEditor.css';
 import { SessionPanel } from '../../components/session-panel/SessionPanel';
 import { createEmptyTrade, createEmptyTrades } from '../../types/session';
 import type { DemoCalculationResult, DemoInstrument, TradeRow, TradeRowError } from '../../types/session';
@@ -17,7 +19,8 @@ function validateRow(row: TradeRow, instruments: Record<string, DemoInstrument>)
   return error;
 }
 
-export function NewSessionPage() {
+export function NewSessionPage({ onCalculated }: { onCalculated: (id: string, name: string) => void }) {
+  const [name, setName] = useState('');
   const [rows, setRows] = useState<TradeRow[]>(createEmptyTrades);
   const [message, setMessage] = useState('');
   const [result, setResult] = useState<DemoCalculationResult | null>(null);
@@ -88,6 +91,7 @@ export function NewSessionPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Ошибка расчёта');
       setResult(data as DemoCalculationResult);
+      onCalculated((data as DemoCalculationResult).calculation_id, name);
       setError(false);
       setMessage('');
     } catch (error) {
@@ -100,6 +104,7 @@ export function NewSessionPage() {
   }
 
   return <section aria-label="Новая сессия">
+    <div className="session-name-form"><label htmlFor="new-session-name">Название сессии</label><div className="session-name-controls"><input id="new-session-name" value={name} disabled={calculating} maxLength={SESSION_NAME_LIMIT} placeholder={DEFAULT_SESSION_NAME} onChange={event => setName(event.target.value)} /></div><span className="session-name-hint">Например, «Портфель ОФЗ». Название сохраняется в этом браузере.</span></div>
     <SessionPanel
       rows={rows} onChange={updateRow}
       onAdd={() => { setRows(previous => [...previous, createEmptyTrade()]); setResult(null); setMessage(''); setError(false); }}

@@ -19,3 +19,10 @@
   .profile { margin: 0; }
   .profile > span:last-child { display: none; }
 }
+.recent-session { display: grid; gap: .3rem; padding: .75rem; border-radius: .5rem; }
+.recent-session:hover { background: var(--color-nav-hover); }
+.recent-session-selected { background: var(--color-nav-active); }
+.recent-session strong { font-size: .9rem; font-weight: 600; }
+.recent-session time { font-size: .75rem; color: #b5c5f1; }
+.recent-status { margin: .5rem .75rem; font-size: .8rem; line-height: 1.5; color: #b5c5f1; }
+.recent-session strong { min-width: 0; overflow-wrap: anywhere; }

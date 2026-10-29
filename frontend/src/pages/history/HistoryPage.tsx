@@ -1,36 +1,19 @@
-import { useEffect, useState } from 'react';
+import { SessionNameEditor } from '../../components/session-name/SessionNameEditor';
+import { DEFAULT_SESSION_NAME } from '../../utils/sessionNames';
 import { SessionPanel } from '../../components/session-panel/SessionPanel';
 import type { DemoCalculationResult, DemoInstrument, TradeRow } from '../../types/session';
 import './HistoryPage.css';
 
-export function HistoryPage({ active }: { active: boolean }) {
-  const [calculations, setCalculations] = useState<DemoCalculationResult[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+interface Props {
+  calculations: DemoCalculationResult[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  loading: boolean;
+  error: string;
+  onRename: (id: string, name: string) => void;
+}
 
-  useEffect(() => {
-    if (!active) return;
-    const controller = new AbortController();
-    setLoading(true);
-    fetch('/api/demo/history', { signal: controller.signal })
-      .then(async response => {
-        if (!response.ok) throw new Error('Не удалось загрузить историю. Попробуйте обновить страницу позже.');
-        return response.json() as Promise<{ calculations: DemoCalculationResult[] }>;
-      })
-      .then(data => {
-        setCalculations(data.calculations);
-        setSelectedId(previous => data.calculations.some(item => item.calculation_id === previous)
-          ? previous : data.calculations[0]?.calculation_id ?? null);
-        setError('');
-      })
-      .catch(reason => {
-        if (reason instanceof Error && reason.name !== 'AbortError') setError(reason.message);
-      })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
-  }, [active]);
-
+export function HistoryPage({ calculations, selectedId, onSelect, loading, error, onRename }: Props) {
   const selected = calculations.find(item => item.calculation_id === selectedId);
   const rows: TradeRow[] = selected?.trades.map((trade, index) => ({
     id: `${selected.calculation_id}-${index}`, isin: trade.isin, quantity: String(trade.quantity),
@@ -49,11 +32,11 @@ export function HistoryPage({ active }: { active: boolean }) {
       {calculations.map(item => <button type="button" key={item.calculation_id}
         className={`history-item ${item.calculation_id === selectedId ? 'history-item-selected' : ''}`}
         aria-pressed={item.calculation_id === selectedId}
-        onClick={() => setSelectedId(item.calculation_id)}>
-        <strong>{item.calculated_at ? new Date(item.calculated_at).toLocaleString('ru-RU') : 'Расчёт'}</strong>
+        onClick={() => onSelect(item.calculation_id)}>
+        <strong>{item.title || DEFAULT_SESSION_NAME}</strong><span>{item.calculated_at ? new Date(item.calculated_at).toLocaleString('ru-RU') : ''}</span>
         <span>{item.trades.length} сделок · DV01 {Number(item.total_dv01_rub).toLocaleString('ru-RU', { maximumFractionDigits: 6 })} ₽</span>
       </button>)}
     </div>}
-    {selected && <div className="history-detail"><SessionPanel rows={rows} instruments={instruments} result={selected} readOnly /></div>}
+    {selected && <div className="history-detail"><SessionNameEditor key={selected.calculation_id} name={selected.title || DEFAULT_SESSION_NAME} onSave={name => onRename(selected.calculation_id, name)} /><SessionPanel rows={rows} instruments={instruments} result={selected} readOnly /></div>}
   </section>;
 }

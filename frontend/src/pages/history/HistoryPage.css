@@ -5,3 +5,5 @@
 .history-item strong { color: var(--color-heading); }
 .history-item-selected { border-color: var(--color-primary); box-shadow: 0 0 0 1px var(--color-primary); }
 .history-detail { margin-top: .25rem; }
+.history-item { max-width: 24rem; flex-shrink: 0; }
+.history-item strong { overflow-wrap: anywhere; }
