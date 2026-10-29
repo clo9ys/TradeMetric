@@ -5,8 +5,7 @@ import type { Currency, Page } from '../../types/session';
 import './WorkspaceHeader.css';
 
 interface Props { page: Page; currency: Currency; onCurrencyChange: (currency: Currency) => void }
-// Демо-расчёт возвращает только RUB; другие валюты пока не предлагаются в интерфейсе.
-const currencies: Currency[] = ['RUB'];
+const currencies: Currency[] = ['RUB', 'USD', 'EUR'];
 
 export function WorkspaceHeader({ page, currency, onCurrencyChange }: Props) {
   const [isOpen, setIsOpen] = useState(false);
