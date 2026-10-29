@@ -6,7 +6,6 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
-# Running this file by path puts scripts/ (not backend/) on sys.path.
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -26,6 +25,7 @@ DEMO_BONDS = (
     {
         "isin_prefix": "RUDEMO00001",
         "issue_name": "DEMO fixed clean",
+        "issuer_name": "Учебный эмитент 1",
         "quantity": 10,
         "quote_kind": "percent",
         "quote_value": Decimal("101.25"),
@@ -39,6 +39,7 @@ DEMO_BONDS = (
     {
         "isin_prefix": "RUDEMO00002",
         "issue_name": "DEMO fixed dirty short",
+        "issuer_name": "Учебный эмитент 2",
         "quantity": -5,
         "quote_kind": "amount",
         "quote_value": Decimal("980"),
@@ -52,6 +53,7 @@ DEMO_BONDS = (
     {
         "isin_prefix": "RUDEMO00003",
         "issue_name": "DEMO floating clean",
+        "issuer_name": "Учебный эмитент 3",
         "quantity": 7,
         "quote_kind": "percent",
         "quote_value": Decimal("99.5"),
@@ -82,6 +84,7 @@ def make_snapshot(bond: dict[str, object], today: date, fetched_at: datetime) ->
     return InstrumentSnapshot(
         isin=demo_isin(str(bond["isin_prefix"])),
         issue_name=str(bond["issue_name"]),
+        issuer_name=str(bond["issuer_name"]),
         source=MarketDataSource.DEMO.value,
         quote_source="SYNTHETIC DEMO DATA — NOT CBONDS",
         provider_instrument_id=None,

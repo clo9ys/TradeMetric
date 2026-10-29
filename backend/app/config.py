@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     cbonds_login: str | None = None
     cbonds_password: str | None = None
     provider_timeout_seconds: float = 10.0
+    demo_mode: bool = False
 
     @property
     def database_url(self) -> URL:
