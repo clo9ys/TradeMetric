@@ -9,7 +9,7 @@ function validateRow(row: TradeRow, instruments: Record<string, DemoInstrument>)
   if (!/^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(row.isin)) {
     error.isin = 'ISIN должен содержать 12 символов: две буквы, девять знаков и контрольную цифру.';
   } else if (!instruments[row.isin]) {
-    error.isin = 'Этот ISIN отсутствует в демо-кеше. Нажмите «Загрузить демо» для списка доступных бумаг.';
+    error.isin = 'Этот ISIN отсутствует в списке доступных инструментов.';
   }
   if (!/^-?\d+$/.test(row.quantity) || Number(row.quantity) === 0 || !Number.isSafeInteger(Number(row.quantity))) {
     error.quantity = 'Укажите ненулевое целое количество бумаг.';
@@ -32,12 +32,12 @@ export function NewSessionPage() {
     const controller = new AbortController();
     fetch('/api/demo/instruments', { signal: controller.signal })
       .then(async response => {
-        if (!response.ok) throw new Error('Демо-сервер недоступен. Запустите backend с DEMO_MODE=true.');
+        if (!response.ok) throw new Error('Не удалось загрузить инструменты. Попробуйте обновить страницу позже.');
         return response.json() as Promise<{ instruments: DemoInstrument[] }>;
       })
       .then(data => {
         setInstruments(Object.fromEntries(data.instruments.map(item => [item.isin, item])));
-        if (data.instruments.length === 0) { setMessage('Демо-снимки не найдены. Запустите скрипт demo_calculation.py.'); setError(true); }
+        if (data.instruments.length === 0) { setMessage('Доступные инструменты пока не найдены.'); setError(true); }
       })
       .catch(error => {
         if (error instanceof Error && error.name !== 'AbortError') { setMessage(error.message); setError(true); }
@@ -72,7 +72,7 @@ export function NewSessionPage() {
       return;
     }
     if (enteredRows.some(row => Object.keys(validateRow(row, instruments)).length > 0)) {
-      setMessage('Исправьте выделенные поля в таблице. Демо-режим рассчитывает только бумаги из загруженного кеша.');
+      setMessage('Исправьте выделенные поля в таблице.');
       setError(true);
       return;
     }
@@ -100,7 +100,6 @@ export function NewSessionPage() {
   }
 
   return <section aria-label="Новая сессия">
-    <p className="status-message">Демонстрационный режим</p>
     <SessionPanel
       rows={rows} onChange={updateRow}
       onAdd={() => { setRows(previous => [...previous, createEmptyTrade()]); setResult(null); setMessage(''); setError(false); }}

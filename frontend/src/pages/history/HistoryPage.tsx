@@ -15,7 +15,7 @@ export function HistoryPage({ active }: { active: boolean }) {
     setLoading(true);
     fetch('/api/demo/history', { signal: controller.signal })
       .then(async response => {
-        if (!response.ok) throw new Error('Не удалось загрузить историю. Проверьте работу backend.');
+        if (!response.ok) throw new Error('Не удалось загрузить историю. Попробуйте обновить страницу позже.');
         return response.json() as Promise<{ calculations: DemoCalculationResult[] }>;
       })
       .then(data => {
