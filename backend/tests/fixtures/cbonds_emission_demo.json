@@ -1,0 +1,16 @@
+{
+  "count": 1,
+  "total": 1,
+  "items": [
+    {
+      "id": "1092551",
+      "isin_code": "US037833EL06",
+      "currency_name": "USD",
+      "outstanding_nominal_price": "2000",
+      "floating_rate": "0",
+      "cupon_period": "2",
+      "number_of_emission_eng": "2.85% 5aug2061, USD",
+      "emitent_name_eng": "Apple"
+    }
+  ]
+}

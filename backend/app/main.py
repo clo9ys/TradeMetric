@@ -21,6 +21,10 @@ def create_app() -> FastAPI:
     register_error_handlers(app)
     app.include_router(auth.router)
     app.include_router(health.router)
+    if get_settings().demo_mode:
+        from app.api.routes import demo
+
+        app.include_router(demo.router)
     return app
 
 

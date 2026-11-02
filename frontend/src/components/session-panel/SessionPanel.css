@@ -1,0 +1,15 @@
+.session-panel { overflow: hidden; background: var(--color-surface); border: 1px solid var(--color-card-border); border-radius: .5625rem; }
+.session-actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.125rem 1.8125rem 1.25rem; }
+.calculate-button { width: 19.3125rem; }
+.session-action-group { display: flex; gap: .75rem; flex-wrap: wrap; }
+@media (max-width: 760px) { .session-actions { flex-wrap: wrap; padding: 1rem; } .session-actions .button { flex: 1; white-space: nowrap; } }
+.trade-fields { margin: 0; padding: 0; min-width: 0; border: 0; }
+.session-actions .button:disabled { opacity: .55; }
+
+.session-action-group .button-secondary { transition: color .15s ease, border-color .15s ease; }
+.session-action-group .button-secondary:hover:not(:disabled) { background: var(--color-surface); color: #263c96; border-color: #263c96; }
+@media (prefers-reduced-motion: reduce) { .session-action-group .button-secondary { transition: none; } }
+
+.calculate-button { transition: background-color .15s ease, border-color .15s ease; }
+.calculate-button:hover:not(:disabled) { background-color: #0955d6; border-color: #104db8; color: var(--color-surface); filter: none; }
+@media (prefers-reduced-motion: reduce) { .calculate-button { transition: none; } }

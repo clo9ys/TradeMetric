@@ -1,0 +1,39 @@
+.results-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; margin-top: 1.5rem; }
+.metric-card { min-height: 9rem; padding: 1.25rem 1.5rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: .5625rem; display: flex; flex-direction: column; justify-content: flex-start; gap: 1.25rem; }
+.metric-card h2 { margin: 0; display: flex; gap: .5rem; align-items: center; font-size: 1.5rem; font-weight: 700; line-height: 1.5; flex-wrap: wrap; }
+.metric-info { display: inline-flex; position: relative; color: var(--color-empty); cursor: help; }
+.metric-info svg { width: 1.25rem; height: 1.25rem; }
+.metric-tooltip { visibility: hidden; opacity: 0; position: absolute; z-index: 20; right: -.65rem; bottom: calc(100% + .75rem); padding: .85rem 1rem; width: min(17rem, 75vw); border: 1px solid #d3dff4; border-radius: .75rem; background: #f8faff; color: #345078; box-shadow: 0 .5rem 1.5rem #192e491a; white-space: normal; text-align: left; font-size: .8rem; line-height: 1.6; font-weight: 400; transform: translateY(3px); transition: opacity .15s ease, transform .15s ease, visibility .15s; }
+.metric-tooltip::after { content: ''; position: absolute; right: .95rem; bottom: -5px; width: 8px; height: 8px; background: #f8faff; border-right: 1px solid #d3dff4; border-bottom: 1px solid #d3dff4; transform: rotate(45deg); }
+.metric-info::after { content: ''; position: absolute; inset-inline: -.5rem; bottom: 100%; height: .8rem; }
+.metric-info:hover, .metric-info:focus { color: var(--color-primary); }
+.metric-info:hover .metric-tooltip, .metric-info:focus .metric-tooltip { visibility: visible; opacity: 1; transform: translateY(0); }
+@media (prefers-reduced-motion: reduce) { .metric-tooltip { transition: none; transform: none; } }
+
+.metric-empty { margin: 0; color: var(--color-empty); font-size: 2rem; font-weight: 400; line-height: 1.35; }
+.metric-value { margin: .375rem 0 0; color: var(--color-brand); font-size: clamp(1.5rem, 2vw, 2.5rem); font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+.trade-results { margin-top: 1.5rem; padding: 1.5rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: .5625rem; }
+.trade-results h2 { margin: 0; font-size: 1.35rem; }
+.trade-results-scroll { overflow-x: auto; }
+.trade-results table { width: 100%; border-collapse: collapse; }
+.trade-results th, .trade-results td { padding: .75rem .5rem; text-align: left; border-bottom: 1px solid var(--color-divider); white-space: nowrap; }
+@media (max-width: 760px) { .results-cards { grid-template-columns: 1fr; gap: 1rem; } .metric-card { min-height: 8rem; } }
+
+@media (min-width: 761px) { .metric-tooltip-single-line { width: max-content; white-space: nowrap; } }
+
+.trade-results { padding: 1.5rem; border-radius: .75rem; }
+.trade-results h2 { margin-bottom: 1rem; color: var(--color-heading); font-size: 1.25rem; line-height: 1.4; }
+.trade-results table { min-width: 36rem; table-layout: fixed; font-size: .9375rem; line-height: 1.5; }
+.trade-results th, .trade-results td { padding: .9rem 1rem; vertical-align: middle; border-bottom-color: var(--color-border); }
+.trade-results th { background: transparent; font-size: .85rem; font-weight: 500; color: var(--color-text); border-bottom-color: var(--color-border); }
+.trade-results td { font-weight: 400; color: var(--color-heading); }
+.trade-results th:first-child, .trade-results td:first-child { width: 28%; text-align: left; }
+.trade-results th:nth-child(2), .trade-results td:nth-child(2) { width: 24%; }
+.trade-results th:nth-child(n+2), .trade-results td:nth-child(n+2) { text-align: right; font-variant-numeric: tabular-nums; }
+.trade-results tbody tr:last-child td { border-bottom: 0; }
+@media (max-width: 760px) { .trade-results { padding: 1rem; } }
+
+.results-sort { display: inline-flex; align-items: center; justify-content: flex-end; gap: .5rem; max-width: 100%; padding: .25rem 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; transition: color .15s ease; }
+.results-sort:hover { color: var(--color-brand); }
+.results-sort-arrow { width: 1rem; flex-shrink: 0; color: var(--color-placeholder); }
+.trade-results th[aria-sort="ascending"] .results-sort, .trade-results th[aria-sort="descending"] .results-sort, .trade-results th[aria-sort="ascending"] .results-sort-arrow, .trade-results th[aria-sort="descending"] .results-sort-arrow { color: var(--color-brand); }

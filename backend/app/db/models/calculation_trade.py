@@ -1,9 +1,19 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, Numeric, UniqueConstraint, func
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    Date,
+    ForeignKey,
+    Numeric,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -18,8 +28,9 @@ class CalculationTrade(Base):
     __table_args__ = (
         UniqueConstraint("calculation_id", "client_trade_id"),
         UniqueConstraint("calculation_id", "line_number"),
-        CheckConstraint("quantity > 0", name="quantity_positive"),
+        CheckConstraint("quantity <> 0", name="quantity_nonzero"),
         CheckConstraint("line_number > 0", name="line_number_positive"),
+        CheckConstraint("fx_rate_rub IS NULL OR fx_rate_rub > 0", name="fx_rate_positive"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -40,6 +51,9 @@ class CalculationTrade(Base):
     duration_used: Mapped[Decimal] = mapped_column(Numeric)
     convexity_used: Mapped[Decimal] = mapped_column(Numeric)
     dv01: Mapped[Decimal] = mapped_column(Numeric)
+    fx_rate_rub: Mapped[Decimal | None] = mapped_column(Numeric)
+    fx_effective_date: Mapped[date | None] = mapped_column(Date)
+    fx_source: Mapped[str | None] = mapped_column(String(50))
 
     calculation: Mapped[Calculation] = relationship(back_populates="trades", lazy="raise")
     snapshot: Mapped[InstrumentSnapshot] = relationship(lazy="raise")

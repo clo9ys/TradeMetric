@@ -1,0 +1,28 @@
+.app-shell { font-family: 'Geologica Cursive', sans-serif; display: flex; min-height: 100dvh; }
+.workspace { flex: 1; min-width: 0; padding: 1.9375rem 4.6875rem 2.75rem 4.625rem; }
+.workspace-content { margin-top: 1.6875rem; }
+@media (max-width: 760px) { .app-shell { flex-direction: column; } .workspace { padding: 1.25rem; } }
+
+/* Начертания Geologica: обычный текст Regular, акценты Medium. */
+.app-shell .nav-link,
+.app-shell .recent h2,
+.app-shell .profile,
+.app-shell .recent-session strong,
+.app-shell .sidebar-admin-link,
+.app-shell .trade-table td,
+.app-shell .trade-input,
+.app-shell .isin-input { font-weight: 400; }
+.app-shell h1,
+.app-shell h2,
+.app-shell h3,
+.app-shell .tab,
+.app-shell .button,
+.app-shell .currency-picker-trigger,
+.app-shell .currency-picker-option,
+.app-shell .trade-table th,
+.app-shell .metric-value,
+.app-shell .rename-session,
+.app-shell .session-name-form > label,
+.app-shell .clear-draft-button { font-weight: 500; }
+
+.app-shell .metric-card h2 { font-weight: 450; }

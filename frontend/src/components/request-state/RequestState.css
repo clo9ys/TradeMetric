@@ -1,0 +1,14 @@
+.request-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.25rem; min-height: 18rem; padding: 2.5rem; text-align: center; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: .6rem; margin: 1rem 0; }
+.request-state-copy { min-width: 0; }
+.request-state h2 { margin: 0; color: var(--color-heading); font-size: 1.15rem; line-height: 1.5; }
+.request-state p { max-width: 40rem; margin: .5rem 0 0; font-size: .9rem; line-height: 1.65; overflow-wrap: anywhere; }
+.request-state-compact { flex-direction: row; justify-content: flex-start; min-height: 0; padding: 1rem 1.25rem; text-align: left; gap: 1rem; }
+.request-state-compact h2 { font-size: 1rem; }
+.request-state-compact .request-state-copy { flex: 1; }
+.request-state-error { border-color: #efc9cc; background: #fff8f8; }
+.request-state-error h2 { color: var(--color-error); }
+.request-state-action { flex-shrink: 0; display: inline-block; padding: .65rem 1.2rem; border: 1px solid var(--color-accent); border-radius: .5rem; color: var(--color-brand); background: var(--color-surface); font-size: .9rem; font-weight: 700; }
+.request-state-action:hover { background: var(--color-input); }
+.request-spinner { width: 1.5rem; height: 1.5rem; flex-shrink: 0; border: 2px solid var(--color-border); border-top-color: var(--color-primary); border-radius: 50%; animation: request-spin .8s linear infinite; }
+@keyframes request-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .request-spinner { animation: none; } }
