@@ -35,3 +35,7 @@
 .login-card input[aria-invalid="true"] { border-color: #df8290; background: #fffafb; }
 .login-card input[aria-invalid="true"]:focus-visible { outline-color: #f2bcc5; }
 .login-field-error { position: absolute; top: calc(100% + .25rem); left: .25rem; margin: 0; color: #b83f53; font-size: .75rem; font-weight: 400; line-height: 1.4; pointer-events: none; }
+
+.login-card .button-primary { transition: background-color .15s ease, border-color .15s ease; }
+.login-card .button-primary:hover:not(:disabled) { background-color: #0955d6; border-color: #104db8; color: var(--color-surface); filter: none; }
+@media (prefers-reduced-motion: reduce) { .login-card .button-primary { transition: none; } }

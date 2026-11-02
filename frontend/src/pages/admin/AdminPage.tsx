@@ -17,7 +17,9 @@ export function AdminPage() {
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>('user');
-  const [error, setError] = useState('');
+  const [errors, setErrors] = useState({ login: '', password: '' });
+  const loginInput = useRef<HTMLInputElement>(null);
+  const passwordInput = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState('');
   const dialog = useRef<HTMLDialogElement>(null);
 
@@ -27,7 +29,7 @@ export function AdminPage() {
   }, [action]);
 
   function open(next: Action) {
-    setLogin(''); setPassword(''); setRole('user'); setError(''); setMessage(''); setAction(next);
+    setLogin(''); setPassword(''); setRole('user'); setErrors({ login: '', password: '' }); setMessage(''); setAction(next);
   }
   function close() { setAction(null); setPassword(''); }
   function save(next: AdminUser[], notice: string) {
@@ -39,12 +41,19 @@ export function AdminPage() {
     event.preventDefault();
     if (!action) return;
     if (action.kind === 'create' || action.kind === 'password') {
-      if (password.length < 8 || password.length > 128 || !password.trim()) { setError('Введите пароль длиной от 8 до 128 символов.'); return; }
+      const name = login.trim();
+      const next = {
+        login: action.kind !== 'create' ? '' : !name ? 'Введите логин' : !/^[a-zA-Z0-9_.@+-]{3,64}$/.test(name) ? 'От 3 до 64 символов: латиница, цифры, _ . @ + -' : users.some(user => user.login.toLowerCase() === name.toLowerCase()) ? 'Этот логин уже занят' : '',
+        password: !password ? 'Введите пароль' : password.length < 8 || password.length > 128 || !password.trim() ? 'Пароль должен содержать от 8 до 128 символов' : '',
+      };
+      setErrors(next);
+      if (next.login || next.password) {
+        (next.login ? loginInput : passwordInput).current?.focus();
+        return;
+      }
     }
     if (action.kind === 'create') {
       const name = login.trim();
-      if (!/^[a-zA-Z0-9_.@+-]{3,64}$/.test(name)) { setError('Логин: от 3 до 64 латинских букв, цифр или символов _ . @ + -'); return; }
-      if (users.some(user => user.login.toLowerCase() === name.toLowerCase())) { setError('Пользователь с таким логином уже существует.'); return; }
       save([...users, { id: crypto.randomUUID(), login: name, role, active: true, createdAt: new Date().toISOString() }], `Демо-пользователь «${name}» создан. Пароль не сохранён: сервер управления пользователями ещё не подключён.`);
     } else if (action.kind === 'password') {
       setMessage('Форма проверена. Пароль не изменён: для этого нужно подключить API управления пользователями.'); close();
@@ -58,7 +67,7 @@ export function AdminPage() {
   const title = action?.kind === 'create' ? 'Новый пользователь' : action?.kind === 'password' ? 'Изменить пароль' : action?.kind === 'delete' ? 'Удалить пользователя?' : action?.kind === 'role' ? 'Изменить роль?' : 'Изменить доступ?';
 
   return <section className="admin-page" aria-labelledby="admin-title">
-    <div className="admin-heading"><div><p className="admin-eyebrow">Администрирование</p><h1 id="admin-title">Пользователи</h1><p>Управляйте пользователями и их доступом к системе</p></div><button className="button button-primary admin-add" onClick={() => open({ kind: 'create' })}><span aria-hidden="true">＋</span> Добавить пользователя</button></div>
+    <div className="admin-heading"><div><h1 id="admin-title">Пользователи</h1><p>Управляйте пользователями и их доступом к системе</p></div><button className="button button-primary admin-add" onClick={() => open({ kind: 'create' })}><span aria-hidden="true">＋</span> Добавить пользователя</button></div>
     <p className="admin-demo">Демо-режим · Список хранится в этом браузере. Реальные аккаунты и пароли на сервере не изменяются.</p>
     <div className="admin-stats"><div><span>Всего пользователей</span><strong>{users.length}</strong></div><div><span>Администраторы</span><strong>{users.filter(user => user.role === 'admin').length}</strong></div><div><span>Активные</span><strong>{users.filter(user => user.active).length}</strong></div></div>
     {storageError && <p className="status-error" role="alert">{storageError}</p>}
@@ -74,15 +83,14 @@ export function AdminPage() {
       <footer className="admin-table-footer">Показано {visible.length} из {users.length}<span>Доступ выдаётся администратором</span></footer>
     </div>
     <dialog className="admin-dialog" ref={dialog} aria-labelledby="admin-dialog-title" onCancel={close} onClose={() => { setAction(null); setPassword(''); }}>
-      {action && <form onSubmit={submit}><div className="admin-dialog-heading"><h2 id="admin-dialog-title">{title}</h2><button type="button" className="admin-close" aria-label="Закрыть окно" onClick={close}>×</button></div>
+      {action && <form onSubmit={submit} noValidate><div className="admin-dialog-heading"><h2 id="admin-dialog-title">{title}</h2><button type="button" className="admin-close" aria-label="Закрыть окно" onClick={close}>×</button></div>
         {action.kind !== 'create' && <p className="admin-dialog-login">{action.user.login}</p>}
-        {action.kind === 'create' && <label className="admin-field">Логин *<input autoFocus required maxLength={64} value={login} onChange={event => { setLogin(event.target.value); setError(''); }} placeholder="Например, ivanov" autoComplete="off" /></label>}
-        {(action.kind === 'create' || action.kind === 'password') && <><label className="admin-field">{action.kind === 'password' ? 'Новый пароль *' : 'Пароль *'}<input autoFocus={action.kind === 'password'} type="password" required minLength={8} maxLength={128} value={password} onChange={event => { setPassword(event.target.value); setError(''); }} autoComplete="new-password" aria-describedby="admin-password-hint" /></label><p id="admin-password-hint" className="admin-hint">От 8 до 128 символов. В демо пароль проверяется только в форме и не сохраняется.</p></>}
+        {action.kind === 'create' && <label className="admin-field">Логин *<input ref={loginInput} aria-invalid={Boolean(errors.login)} aria-describedby="admin-login-error" autoFocus required maxLength={64} value={login} onChange={event => { setLogin(event.target.value); setErrors(previous => ({ ...previous, login: '' })); }} placeholder="Например, ivanov" autoComplete="off" /><span id="admin-login-error" className="admin-field-error" role="alert">{errors.login}</span></label>}
+        {(action.kind === 'create' || action.kind === 'password') && <><label className="admin-field">{action.kind === 'password' ? 'Новый пароль *' : 'Пароль *'}<input ref={passwordInput} aria-invalid={Boolean(errors.password)} autoFocus={action.kind === 'password'} type="password" required minLength={8} maxLength={128} value={password} onChange={event => { setPassword(event.target.value); setErrors(previous => ({ ...previous, password: '' })); }} autoComplete="new-password" aria-describedby="admin-password-error admin-password-hint" /><span id="admin-password-error" className="admin-field-error" role="alert">{errors.password}</span></label><p id="admin-password-hint" className="admin-hint">От 8 до 128 символов. В демо пароль проверяется только в форме и не сохраняется.</p></>}
         {action.kind === 'create' && <div className="admin-field"><span>Роль</span><Select label="Роль" value={role} onChange={value => setRole(value as UserRole)} options={[{ value: 'user', label: 'user — пользователь' }, { value: 'admin', label: 'admin — администратор' }]} /></div>}
         {action.kind === 'delete' && <p>Пользователь будет удалён из демо-списка. Отменить удаление нельзя.</p>}
         {action.kind === 'role' && <p>Назначить роль <strong>{action.user.role === 'admin' ? 'user' : 'admin'}</strong> этому демо-пользователю?</p>}
         {action.kind === 'status' && <p>{action.user.active ? 'Заблокировать' : 'Восстановить'} доступ для этого демо-пользователя?</p>}
-        {error && <p className="status-error" role="alert">{error}</p>}
         <div className="admin-dialog-footer"><button type="button" className="button button-secondary" autoFocus={action.kind === 'delete'} onClick={close}>Отмена</button><button type="submit" className={`button button-primary ${action.kind === 'delete' ? 'admin-danger' : ''}`}>{action.kind === 'create' ? 'Создать' : action.kind === 'delete' ? 'Удалить' : action.kind === 'password' ? 'Проверить форму' : 'Подтвердить'}</button></div>
       </form>}
     </dialog>
