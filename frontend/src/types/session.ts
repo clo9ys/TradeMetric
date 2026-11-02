@@ -1,4 +1,4 @@
-export type Page = 'login' | 'new' | 'history';
+export type Page = 'login' | 'new' | 'history' | 'admin' | 'adm_new' | 'adm_history';
 export type Currency = 'RUB' | 'USD' | 'EUR';
 
 export interface TradeRow {

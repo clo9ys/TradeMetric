@@ -26,3 +26,10 @@
 .recent-session time { font-size: .75rem; color: #b5c5f1; }
 .recent-status { margin: .5rem .75rem; font-size: .8rem; line-height: 1.5; color: #b5c5f1; }
 .recent-session strong { min-width: 0; overflow-wrap: anywhere; }
+
+.sidebar-admin-link { display: flex; align-items: center; gap: .9375rem; flex-shrink: 0; margin: 1rem 0 0; padding: .375rem 1rem; font-size: .9375rem; font-weight: 600; border-radius: .75rem; transition: background .2s ease, color .2s ease; }
+.admin-nav-icon { width: 2.4375rem; height: 2.4375rem; display: grid; place-items: center; flex-shrink: 0; }
+.admin-nav-icon svg { width: 1.5rem; height: 1.5rem; }
+.sidebar-admin-link:hover, .sidebar-admin-link:focus-visible { color: white; background: var(--color-nav-hover); }
+@media (prefers-reduced-motion: reduce) { .sidebar-admin-link { transition: none; } }
+@media (max-width: 760px) { .sidebar-admin-link { margin-top: 0; } }

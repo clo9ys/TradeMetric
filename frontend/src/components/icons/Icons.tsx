@@ -14,3 +14,5 @@ export function PlusIcon() { return <Icon><path d="M12 4v16M4 12h16" /></Icon>; 
 export function ArrowIcon() { return <Icon><path d="M3 12h18m-6-6 6 6-6 6" /></Icon>; }
 export function TrashIcon() { return <Icon><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7" /></Icon>; }
 export function InfoIcon() { return <Icon><circle cx="12" cy="12" r="9" /><path d="M12 11v6m0-10v.01" /></Icon>; }
+
+export function SettingsIcon() { return <Icon><path d="m9 3-.6 2.4-2 .9-2.2-.7-2 3.4 1.7 1.7v2.6L2.2 15l2 3.4 2.2-.7 2 .9L9 21h4l.6-2.4 2-.9 2.2.7 2-3.4-1.7-1.7v-2.6L19.8 9l-2-3.4-2.2.7-2-.9L13 3Z" /><circle cx="11" cy="12" r="3" /></Icon>; }

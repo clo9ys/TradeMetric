@@ -3,10 +3,14 @@ import { WorkspaceLayout } from '../layouts/WorkspaceLayout';
 import { LoginPage } from '../pages/login/LoginPage';
 import { NewSessionPage } from '../pages/new-session/NewSessionPage';
 import { HistoryPage } from '../pages/history/HistoryPage';
+import { AdminPage } from '../pages/admin/AdminPage';
 import { DEFAULT_SESSION_NAME, normalizeSessionName, readSessionNames, writeSessionNames } from '../utils/sessionNames';
 import type { Currency, DemoCalculationResult, Page } from '../types/session';
 
 function currentPage(): Page {
+  if (location.hash === '#adm_new') return 'adm_new';
+  if (location.hash === '#adm_history') return 'adm_history';
+  if (location.hash === '#admin') return 'admin';
   if (location.hash === '#login') return 'login';
   if (location.hash === '#history') return 'history';
   return 'new';
@@ -21,7 +25,9 @@ export function App() {
   const [historyError, setHistoryError] = useState('');
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const [historyRevision, setHistoryRevision] = useState(0);
-  const historyActive = page === 'history';
+  const adminMode = page === 'adm_new' || page === 'adm_history';
+  const workspacePage = page === 'adm_new' ? 'new' : page === 'adm_history' ? 'history' : page;
+  const historyActive = workspacePage === 'history';
   const [sessionNames, setSessionNames] = useState(readSessionNames);
   const [nameStorageError, setNameStorageError] = useState('');
   const namedCalculations = calculations.map(item => ({ ...item, title: sessionNames[item.calculation_id] ?? item.title ?? DEFAULT_SESSION_NAME }));
@@ -63,18 +69,19 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    const titles = { login: 'Вход', new: 'Новая сессия', history: 'История' };
+    const titles = { login: 'Вход', new: 'Новая сессия', history: 'История', admin: 'Пользователи', adm_new: 'Новая сессия', adm_history: 'История' };
     document.title = `TradeMetric — ${titles[page]}`;
   }, [page]);
 
   // Сохраняем черновик при переключении вкладок до перезагрузки страницы.
   return <>
     {page === 'login' && <LoginPage />}
-    <div hidden={page === 'login'}>
-      <WorkspaceLayout page={page} currency={currency} onCurrencyChange={setCurrency} calculations={namedCalculations} selectedHistoryId={selectedHistoryId} onHistorySelect={setSelectedHistoryId} historyLoading={historyLoading} historyError={historyError}>
+    {page === 'admin' && <main className="admin-workspace"><header className="admin-workspace-header"><a className="admin-back" href="#adm_new">Вернуться к расчётам</a><span>Администрирование</span></header><AdminPage /></main>}
+    <div hidden={page === 'login' || page === 'admin'}>
+      <WorkspaceLayout adminMode={adminMode} page={workspacePage} currency={currency} onCurrencyChange={setCurrency} calculations={namedCalculations} selectedHistoryId={selectedHistoryId} onHistorySelect={setSelectedHistoryId} historyLoading={historyLoading} historyError={historyError}>
         {nameStorageError && <p className="status-error" role="alert">{nameStorageError}</p>}
-        <div hidden={page !== 'new'}><NewSessionPage onCalculated={(id, name) => { saveSessionName(id, name); setHistoryRevision(value => value + 1); }} /></div>
-        <div hidden={page !== 'history'}><HistoryPage calculations={namedCalculations} selectedId={selectedHistoryId} onSelect={setSelectedHistoryId} loading={historyLoading} error={historyError} onRename={saveSessionName} onRetry={() => setHistoryRevision(value => value + 1)} /></div>
+        <div hidden={workspacePage !== 'new'}><NewSessionPage onCalculated={(id, name) => { saveSessionName(id, name); setHistoryRevision(value => value + 1); }} /></div>
+        <div hidden={workspacePage !== 'history'}><HistoryPage calculations={namedCalculations} selectedId={selectedHistoryId} onSelect={setSelectedHistoryId} loading={historyLoading} error={historyError} onRename={saveSessionName} onRetry={() => setHistoryRevision(value => value + 1)} /></div>
       </WorkspaceLayout>
     </div>
   </>;

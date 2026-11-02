@@ -4,10 +4,10 @@ import { ChevronIcon } from '../icons/Icons';
 import type { Currency, Page } from '../../types/session';
 import './WorkspaceHeader.css';
 
-interface Props { page: Page; currency: Currency; onCurrencyChange: (currency: Currency) => void }
+interface Props { adminMode?: boolean; page: Page; currency: Currency; onCurrencyChange: (currency: Currency) => void }
 const currencies: Currency[] = ['RUB', 'USD', 'EUR'];
 
-export function WorkspaceHeader({ page, currency, onCurrencyChange }: Props) {
+export function WorkspaceHeader({ adminMode = false, page, currency, onCurrencyChange }: Props) {
   const [isOpen, setIsOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -37,8 +37,8 @@ export function WorkspaceHeader({ page, currency, onCurrencyChange }: Props) {
 
   return <header className="workspace-header">
     <nav className="tabs" aria-label="Расчёты">
-      <a className={`tab ${page === 'new' ? 'active' : ''}`} href="#new" aria-current={page === 'new' ? 'page' : undefined}>Новая сессия</a>
-      <a className={`tab ${page === 'history' ? 'active' : ''}`} href="#history" aria-current={page === 'history' ? 'page' : undefined}>История</a>
+      <a className={`tab ${page === 'new' ? 'active' : ''}`} href={adminMode ? '#adm_new' : '#new'} aria-current={page === 'new' ? 'page' : undefined}>Новая сессия</a>
+      <a className={`tab ${page === 'history' ? 'active' : ''}`} href={adminMode ? '#adm_history' : '#history'} aria-current={page === 'history' ? 'page' : undefined}>История</a>
     </nav>
     <div className="currency-picker" ref={pickerRef}
       onBlur={event => {
