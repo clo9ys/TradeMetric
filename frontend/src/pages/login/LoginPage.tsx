@@ -4,9 +4,20 @@ import './LoginPage.css';
 
 export function LoginPage() {
   const [message, setMessage] = useState('');
+  const [errors, setErrors] = useState({ login: '', password: '' });
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = event.currentTarget;
+    const login = form.elements.namedItem('username') as HTMLInputElement;
+    const password = form.elements.namedItem('password') as HTMLInputElement;
+    const next = { login: login.value.trim() ? '' : 'Введите логин', password: password.value ? '' : 'Введите пароль' };
+    setErrors(next);
+    setMessage('');
+    if (next.login || next.password) {
+      (next.login ? login : password).focus();
+      return;
+    }
     setMessage('Вход станет доступен после подключения сервера авторизации.');
   }
 
@@ -17,11 +28,17 @@ export function LoginPage() {
     </section>
     <section className="login-card" aria-labelledby="login-heading">
       <h2 id="login-heading">Вход в аккаунт</h2>
-      <form onSubmit={submit}>
+      <form onSubmit={submit} noValidate>
+        <div className="login-field">
         <label className="sr-only" htmlFor="login">Логин</label>
-        <input id="login" name="username" autoComplete="username" placeholder="Логин" required onChange={() => setMessage('')} />
+        <input id="login" name="username" autoComplete="username" placeholder="Логин" required aria-invalid={Boolean(errors.login)} aria-describedby={errors.login ? 'login-error' : undefined} onChange={event => { setMessage(''); if (event.target.value .trim()) setErrors(previous => ({ ...previous, login: '' })); }} />
+        {errors.login && <p id="login-error" className="login-field-error" role="alert">{errors.login}</p>}
+        </div>
+        <div className="login-field">
         <label className="sr-only" htmlFor="password">Пароль</label>
-        <input id="password" name="password" type="password" autoComplete="current-password" placeholder="Пароль" required onChange={() => setMessage('')} />
+        <input id="password" name="password" type="password" autoComplete="current-password" placeholder="Пароль" required aria-invalid={Boolean(errors.password)} aria-describedby={errors.password ? 'password-error' : undefined} onChange={event => { setMessage(''); if (event.target.value) setErrors(previous => ({ ...previous, password: '' })); }} />
+        {errors.password && <p id="password-error" className="login-field-error" role="alert">{errors.password}</p>}
+        </div>
         <button className="button button-primary" type="submit">Войти</button>
         {message && <p className="status-message" role="status">{message}</p>}
       </form>

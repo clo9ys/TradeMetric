@@ -10,7 +10,9 @@
 .trade-input::placeholder { color: var(--color-placeholder); opacity: 1; }
 .isin-input { color: var(--color-brand); font-weight: 700; }
 .empty-field { height: auto; min-height: 3.125rem; padding-block: .6rem; line-height: 1.4; white-space: normal; overflow-wrap: anywhere; background: var(--color-skeleton); color: #c7c7c7; font-size: 1.375rem; font-weight: 400; }
-.trade-table td.delete-cell { padding: 0 .75rem 0 0; }
-.delete-button { width: 1.75rem; height: 2.75rem; display: grid; place-items: center; padding: 0; border: 0; background: transparent; color: var(--color-placeholder); }
-.delete-button svg { width: 1.5rem; height: 1.5rem; }
+.trade-table td.delete-cell { padding: 0; text-align: center; }
+.delete-button { position: relative; left: -.875rem; width: 100%; height: 2.75rem; display: grid; place-items: center; padding: 0; border: 0; background: transparent; color: var(--color-placeholder); }
+.delete-button svg { display: block; width: 1.25rem; height: 1.25rem; transform: translateY(-1px); }
 .delete-button:hover:not(:disabled) { color: var(--color-error); }
+
+.filled-field { font-family: inherit; font-size: .9375rem; font-weight: 400; color: var(--color-heading); background: var(--color-input); }

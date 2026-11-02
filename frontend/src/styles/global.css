@@ -1,3 +1,16 @@
+@font-face { font-family: 'Geologica Cursive'; src: url('../assets/fonts/geologica/Geologica-Cursive-450.ttf') format('truetype'); font-style: normal; font-weight: 450; font-display: swap; }
+@font-face { font-family: 'Geologica Cursive'; src: url('../assets/fonts/geologica/Geologica-Cursive-400.ttf') format('truetype'); font-style: normal; font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Geologica Cursive'; src: url('../assets/fonts/geologica/Geologica-Cursive-500.ttf') format('truetype'); font-style: normal; font-weight: 500; font-display: swap; }
+@font-face { font-family: 'Geologica Cursive'; src: url('../assets/fonts/geologica/Geologica-Cursive-600.ttf') format('truetype'); font-style: normal; font-weight: 600; font-display: swap; }
+@font-face { font-family: 'Geologica Cursive'; src: url('../assets/fonts/geologica/Geologica-Cursive-700.ttf') format('truetype'); font-style: normal; font-weight: 700; font-display: swap; }
+@font-face {
+  font-family: 'Bounded';
+  src: url('../assets/fonts/bounded/Bounded-Variable.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+}
+.brand, .login-brand h1 { font-family: 'Bounded', 'Manrope', sans-serif; }
 :root { font-family: 'Manrope', sans-serif; font-size: clamp(12px, 1.111111vw, 16px); color: var(--color-text); background: var(--color-background); font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 360px; }
@@ -19,3 +32,12 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .trade-field-error { display: block; margin-top: .25rem; font-size: .75rem; line-height: 1.35; }
 .trade-input[aria-invalid="true"] { border-color: var(--color-error); }
 @media (max-width: 760px) { :root { font-size: 14px; } }
+
+/* Тонкие полосы прокрутки в палитре интерфейса. */
+:root { scrollbar-width: thin; scrollbar-color: #a8b6ca var(--color-background); }
+* { scrollbar-width: thin; scrollbar-color: #a8b6ca transparent; }
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #a8b6ca; border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: #8396b1; }
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
