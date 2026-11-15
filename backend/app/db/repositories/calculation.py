@@ -1,7 +1,7 @@
 import uuid
 from collections.abc import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -43,3 +43,8 @@ class CalculationRepository:
             .options(selectinload(Calculation.trades).selectinload(CalculationTrade.snapshot))
         )
         return await self._session.scalar(query)
+
+    async def exists_for_user(self, user_id: uuid.UUID) -> bool:
+        return bool(
+            await self._session.scalar(select(exists().where(Calculation.user_id == user_id)))
+        )

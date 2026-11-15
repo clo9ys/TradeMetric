@@ -1,3 +1,5 @@
+import uuid
+
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -24,3 +26,7 @@ class AuthSessionRepository:
 
     async def delete(self, token_hash: str) -> None:
         await self._session.execute(delete(AuthSession).where(AuthSession.token_hash == token_hash))
+
+    async def delete_for_user(self, user_id: uuid.UUID) -> None:
+        """Разлогинивает пользователя везде: после блокировки или смены пароля и роли"""
+        await self._session.execute(delete(AuthSession).where(AuthSession.user_id == user_id))
