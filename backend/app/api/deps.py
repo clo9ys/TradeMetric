@@ -7,6 +7,7 @@ from app.config import get_settings
 from app.db.models import AuthSession
 from app.db.uow import UnitOfWork
 from app.security import tokens_equal
+from app.services.admin_users import AdminUserService
 from app.services.auth import AuthService, NotAuthenticated
 
 SESSION_COOKIE = "tm_session"
@@ -48,3 +49,19 @@ async def require_csrf(
 
 
 CsrfSession = Annotated[AuthSession, Depends(require_csrf)]
+
+
+async def require_admin(auth_session: CurrentSession) -> AuthSession:
+    """Пускает только админов. Остальным 403 с текстом «Нужны права администратора»"""
+    # TODO(Максим): не админ -> 403
+    raise NotImplementedError
+
+
+AdminSession = Annotated[AuthSession, Depends(require_admin)]
+
+
+def get_admin_user_service(uow: Annotated[UnitOfWork, Depends(get_uow)]) -> AdminUserService:
+    return AdminUserService(uow)
+
+
+AdminUserServiceDep = Annotated[AdminUserService, Depends(get_admin_user_service)]
