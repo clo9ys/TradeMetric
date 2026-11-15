@@ -108,7 +108,7 @@ export function App() {
 
   // Сохраняем черновик при переключении вкладок до перезагрузки страницы.
   return <>
-    {visiblePage === 'admin' && <main className="admin-workspace"><header className="admin-workspace-header"><a className="admin-back" href="#adm_new">Вернуться к расчётам</a><span>Администрирование</span></header><AdminPage /></main>}
+    {visiblePage === 'admin' && <main className="admin-workspace"><header className="admin-workspace-header"><a className="admin-back" href="#adm_new">Вернуться к расчётам</a><span>Администрирование</span></header><AdminPage currentUserId={user.id} onOwnPasswordChanged={() => { setUser(null); location.hash = '#login'; }} /></main>}
     <div hidden={visiblePage === 'admin'}>
       <WorkspaceLayout adminMode={adminMode} userEmail={user.email} onLogout={handleLogout} page={workspacePage} currency={currency} onCurrencyChange={setCurrency} calculations={namedCalculations} selectedHistoryId={selectedHistoryId} onHistorySelect={setSelectedHistoryId} historyLoading={historyLoading} historyError={historyError}>
         {nameStorageError && <p className="status-error" role="alert">{nameStorageError}</p>}
