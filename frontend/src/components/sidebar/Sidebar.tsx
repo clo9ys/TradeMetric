@@ -4,6 +4,8 @@ import './Sidebar.css';
 
 interface Props {
   adminMode?: boolean;
+  userEmail: string;
+  onLogout: () => void;
   page: Page;
   calculations: DemoCalculationResult[];
   selectedId: string | null;
@@ -12,7 +14,7 @@ interface Props {
   error: string;
 }
 
-export function Sidebar({ adminMode = false, page, calculations, selectedId, onSelect, loading, error }: Props) {
+export function Sidebar({ adminMode = false, userEmail, onLogout, page, calculations, selectedId, onSelect, loading, error }: Props) {
   return <aside className="sidebar" aria-label="Боковая панель">
     <a className="brand" href={adminMode ? '#adm_new' : '#new'} aria-label="TradeMetric — новая сессия"><ChartIcon /><span>TradeMetric</span></a>
     <nav className="main-nav" aria-label="Разделы приложения">
@@ -33,6 +35,6 @@ export function Sidebar({ adminMode = false, page, calculations, selectedId, onS
       {calculations.length === 0 && <p className="recent-status" role="status">{loading ? 'Загружаем сессии…' : error ? 'Не удалось загрузить сессии' : 'Сохранённых сессий пока нет'}</p>}
     </section>
     {adminMode && <a className="sidebar-admin-link" href="#admin"><span className="admin-nav-icon"><SettingsIcon /></span><span>Управление</span></a>}
-    <a className="profile" href="#login" aria-label="Пользователь — перейти к экрану входа"><span className="avatar"><UserIcon /></span><span>Пользователь</span></a>
+    <div className="profile"><span className="avatar"><UserIcon /></span><span className="profile-email" title={userEmail}>{userEmail}</span><button type="button" className="profile-logout" onClick={onLogout}>Выйти</button></div>
   </aside>;
 }
