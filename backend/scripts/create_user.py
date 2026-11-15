@@ -5,9 +5,9 @@ import sys
 
 from app.config import get_settings
 from app.db.engine import DatabaseManager
-from app.db.models import User
 from app.db.uow import UnitOfWork
-from app.security import hash_password
+from app.domain.enums import UserRole
+from app.services.admin_users import AdminUserService, EmailTaken
 
 MIN_PASSWORD_LENGTH = 8
 
@@ -23,26 +23,34 @@ def read_password() -> str:
     return pswrd1
 
 
-async def create_user(email: str, password: str) -> None:
+async def create_user(email: str, password: str, role: UserRole) -> None:
     db = DatabaseManager(get_settings().database_url)
     try:
-        async with UnitOfWork(db.session_factory) as uow:
-            email = email.strip().lower()
-            if await uow.users.get_by_email(email):
-                sys.exit("Пользователь с таким email уже создан")
-            await uow.users.add(User(email=email, password_hash=hash_password(password)))
-            await uow.commit()
-
+        await AdminUserService(UnitOfWork(db.session_factory)).create_user(email, password, role)
+    except EmailTaken:
+        sys.exit("Пользователь с таким email уже создан")
     finally:
         await db.dispose()
 
 
-def main() -> None:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Создать пользователя TradeMetric")
     parser.add_argument("email")
-    args = parser.parse_args()
-    asyncio.run(create_user(args.email, read_password()))
-    print(f"Пользователь {args.email} создан")
+    parser.add_argument(
+        "--admin",
+        dest="role",
+        action="store_const",
+        const=UserRole.ADMIN,
+        default=UserRole.USER,
+        help="создать администратора (первого админа заводят только так)",
+    )
+    return parser.parse_args(argv)
+
+
+def main() -> None:
+    args = parse_args()
+    asyncio.run(create_user(args.email, read_password(), args.role))
+    print(f"Пользователь {args.email} создан, роль {args.role.value}")
 
 
 if __name__ == "__main__":
