@@ -6,6 +6,7 @@ from fastapi import Cookie, Depends, Header, HTTPException, Request, status
 from app.config import get_settings
 from app.db.models import AuthSession
 from app.db.uow import UnitOfWork
+from app.domain.enums import UserRole
 from app.security import tokens_equal
 from app.services.admin_users import AdminUserService
 from app.services.auth import AuthService, NotAuthenticated
@@ -53,8 +54,9 @@ CsrfSession = Annotated[AuthSession, Depends(require_csrf)]
 
 async def require_admin(auth_session: CurrentSession) -> AuthSession:
     """Пускает только админов. Остальным 403 с текстом «Нужны права администратора»"""
-    # TODO(Максим): не админ -> 403
-    raise NotImplementedError
+    if auth_session.user.role != UserRole.ADMIN.value:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Нужны права администратора")
+    return auth_session
 
 
 AdminSession = Annotated[AuthSession, Depends(require_admin)]

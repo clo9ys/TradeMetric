@@ -105,7 +105,12 @@ class AdminUserService:
         - нельзя снять роль или заблокировать последнего активного админа.
           active_admins уже посчитан с блокировкой строк, см. count_active_admins
         """
-        # TODO(Максим): правила, 5–8 строк. Тексты ошибок смотри в tests/unit/test_admin_users.py
+        if user.id == actor_id:
+            raise AdminRuleViolation("Нельзя менять свою роль или блокировать себя")
+        loses_admin = (role is not None and role != UserRole.ADMIN) or is_active is False
+        if user.role == UserRole.ADMIN.value and user.is_active and loses_admin:
+            if active_admins <= 1:
+                raise AdminRuleViolation("Нельзя оставить систему без администратора")
 
     @staticmethod
     def _check_can_delete(
@@ -122,4 +127,11 @@ class AdminUserService:
         - пользователя с историей расчётов удалить нельзя: история неизменна,
           такого пользователя блокируют
         """
-        # TODO(Максим): правила, 5–8 строк. Тексты ошибок смотри в tests/unit/test_admin_users.py
+        if user.id == actor_id:
+            raise AdminRuleViolation("Нельзя удалить себя")
+        if user.role == UserRole.ADMIN.value and user.is_active and active_admins <= 1:
+            raise AdminRuleViolation("Нельзя оставить систему без администратора")
+        if has_calculations:
+            raise AdminRuleViolation(
+                "У пользователя есть расчёты: заблокируйте его вместо удаления"
+            )
