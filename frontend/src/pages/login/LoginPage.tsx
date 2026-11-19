@@ -1,43 +1,30 @@
+import { login as authenticate } from '../../api/auth';
+import type { CurrentUser } from '../../api/auth';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { login as loginRequest } from '../../api/auth';
-import type { CurrentUser } from '../../api/auth';
-import { ApiError } from '../../api/client';
 import './LoginPage.css';
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-interface Props { onLoggedIn: (user: CurrentUser) => void }
-
-export function LoginPage({ onLoggedIn }: Props) {
+export function LoginPage({ onLoggedIn }: { onLoggedIn: (user: CurrentUser) => void }) {
   const [message, setMessage] = useState('');
   const [errors, setErrors] = useState({ login: '', password: '' });
-  const [submitting, setSubmitting] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     const login = form.elements.namedItem('username') as HTMLInputElement;
     const password = form.elements.namedItem('password') as HTMLInputElement;
-    const email = login.value.trim();
-    const next = {
-      login: !email ? 'Введите email' : !EMAIL_PATTERN.test(email) ? 'Введите email в формате name@example.com' : '',
-      password: password.value ? '' : 'Введите пароль',
-    };
+    const next = { login: login.value.trim() ? '' : 'Введите логин', password: password.value ? '' : 'Введите пароль' };
     setErrors(next);
     setMessage('');
     if (next.login || next.password) {
       (next.login ? login : password).focus();
       return;
     }
-    setSubmitting(true);
     try {
-      onLoggedIn(await loginRequest(email, password.value));
-    } catch (error) {
-      setMessage(error instanceof ApiError ? error.message : 'Не удалось войти. Попробуйте ещё раз.');
-      password.select();
-    } finally {
-      setSubmitting(false);
+      const user = await authenticate(login.value.trim(), password.value);
+      onLoggedIn(user);
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : 'Не удалось войти.');
     }
   }
 
@@ -50,8 +37,8 @@ export function LoginPage({ onLoggedIn }: Props) {
       <h2 id="login-heading">Вход в аккаунт</h2>
       <form onSubmit={submit} noValidate>
         <div className="login-field">
-        <label className="sr-only" htmlFor="login">Email</label>
-        <input id="login" name="username" type="email" inputMode="email" autoComplete="username" placeholder="Email" required aria-invalid={Boolean(errors.login)} aria-describedby={errors.login ? 'login-error' : undefined} onChange={event => { setMessage(''); if (event.target.value .trim()) setErrors(previous => ({ ...previous, login: '' })); }} />
+        <label className="sr-only" htmlFor="login">Логин</label>
+        <input id="login" name="username" autoComplete="username" placeholder="Логин" required aria-invalid={Boolean(errors.login)} aria-describedby={errors.login ? 'login-error' : undefined} onChange={event => { setMessage(''); if (event.target.value .trim()) setErrors(previous => ({ ...previous, login: '' })); }} />
         {errors.login && <p id="login-error" className="login-field-error" role="alert">{errors.login}</p>}
         </div>
         <div className="login-field">
@@ -59,8 +46,8 @@ export function LoginPage({ onLoggedIn }: Props) {
         <input id="password" name="password" type="password" autoComplete="current-password" placeholder="Пароль" required aria-invalid={Boolean(errors.password)} aria-describedby={errors.password ? 'password-error' : undefined} onChange={event => { setMessage(''); if (event.target.value) setErrors(previous => ({ ...previous, password: '' })); }} />
         {errors.password && <p id="password-error" className="login-field-error" role="alert">{errors.password}</p>}
         </div>
-        <button className="button button-primary" type="submit" disabled={submitting}>{submitting ? 'Входим…' : 'Войти'}</button>
-        {message && <p className="status-message status-error" role="alert">{message}</p>}
+        <button className="button button-primary" type="submit">Войти</button>
+        {message && <p className="status-message" role="status">{message}</p>}
       </form>
     </section>
     <p className="login-summary">Принимайте обоснованные торговые решения на основе мгновенного<br className="desktop-break" /> вычисления показателя DV01 и справедливой стоимости.<br className="desktop-break" /> Платформа позволяет оценивать чувствительность портфеля к<br className="desktop-break" /> колебаниям процентных ставок с точностью до базисного пункта.</p>

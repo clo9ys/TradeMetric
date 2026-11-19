@@ -1,3 +1,5 @@
+import { apiRequest } from '../../api/client';
+import { calculateTrades } from '../../api/calculations';
 import { RequestState } from '../../components/request-state/RequestState';
 import { useEffect, useRef, useState } from 'react';
 import { draftFingerprint } from '../../utils/sessionDraft';
@@ -23,6 +25,7 @@ function validateRow(row: TradeRow, instruments: Record<string, DemoInstrument>)
 }
 
 export function NewSessionPage({ onCalculated }: { onCalculated: (id: string, name: string) => void }) {
+  const [lastTradingDate, setLastTradingDate] = useState('');
   const [name, setName] = useState('');
   const [rows, setRows] = useState<TradeRow[]>(createEmptyTrades);
   const [message, setMessage] = useState('');
@@ -80,17 +83,15 @@ export function NewSessionPage({ onCalculated }: { onCalculated: (id: string, na
     const controller = new AbortController();
     setInstrumentsLoading(true);
     setInstrumentsError('');
-    fetch('/api/demo/instruments', { signal: controller.signal })
-      .then(async response => {
-        if (!response.ok) throw new Error('Не удалось загрузить инструменты. Попробуйте обновить страницу позже.');
-        return response.json() as Promise<{ instruments: DemoInstrument[] }>;
-      })
+    apiRequest<{ instruments: DemoInstrument[] }>('/api/instruments', { signal: controller.signal })
       .then(data => {
         if (controller.signal.aborted) return;
         setInstruments(Object.fromEntries(data.instruments.map(item => [item.isin, item])));
+        const dates = [...new Set(data.instruments.map(item => item.quote_as_of_date).filter(Boolean))];
+        setLastTradingDate(dates.length === 1 ? dates[0]! : '');
       })
-      .catch(() => {
-        if (!controller.signal.aborted) setInstrumentsError('Не удалось загрузить доступные инструменты.');
+      .catch(reason => {
+        if (!controller.signal.aborted) setInstrumentsError(reason instanceof Error ? reason.message : 'Не удалось загрузить доступные инструменты.');
       })
       .finally(() => { if (!controller.signal.aborted) setInstrumentsLoading(false); });
     return () => controller.abort();
@@ -104,22 +105,14 @@ export function NewSessionPage({ onCalculated }: { onCalculated: (id: string, na
     setError(false);
   }
 
-  function loadDemo() {
-    setCalculationError('');
-    setRows(Object.values(instruments).map(instrument => ({
-      id: crypto.randomUUID(), isin: instrument.isin, quantity: String(instrument.default_quantity),
-    })));
-    setResult(null);
-    setTouchedRows(new Set());
-    setValidationRequested(false);
-    setError(false);
-    setMessage('');
-  }
-
   async function calculate() {
     if (calculating || instrumentsLoading || instrumentsError || !Object.keys(instruments).length) return;
     setCalculationError('');
     setValidationRequested(true);
+    if (!lastTradingDate) {
+      setCalculationError('Нет согласованной даты котировок. Обновите рыночные данные.');
+      return;
+    }
     const enteredRows = rows.filter(row => row.isin || row.quantity);
     if (enteredRows.length === 0) {
       setMessage('Введите ISIN и объём хотя бы одной сделки.');
@@ -136,15 +129,9 @@ export function NewSessionPage({ onCalculated }: { onCalculated: (id: string, na
     setError(false);
     setMessage('');
     try {
-      const response = await fetch('/api/demo/calculate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trades: enteredRows.map(row => ({ isin: row.isin, quantity: Number(row.quantity) })) }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Ошибка расчёта');
-      setResult(data as DemoCalculationResult);
-      onCalculated((data as DemoCalculationResult).calculation_id, name);
+      const data = await calculateTrades(lastTradingDate, enteredRows);
+      setResult(data);
+      onCalculated(data.calculation_id, name);
       setSavedFingerprint(submittedFingerprint);
       setError(false);
       setMessage('');
@@ -160,7 +147,7 @@ export function NewSessionPage({ onCalculated }: { onCalculated: (id: string, na
     <div className="draft-toolbar"><div className="session-name-form"><label htmlFor="new-session-name">Название сессии</label><div className="session-name-controls"><input ref={nameInputRef} id="new-session-name" value={name} disabled={calculating} maxLength={SESSION_NAME_LIMIT} placeholder={DEFAULT_SESSION_NAME} onChange={event => setName(event.target.value)} /></div><span className="session-name-hint">Например, «Портфель ОФЗ». Название сохраняется в этом браузере.</span></div><button ref={resetButtonRef} type="button" className="clear-draft-button" disabled={calculating || !canReset} onClick={() => setResetOpen(true)}>Очистить сессию</button></div>
     <p className={`draft-status${hasUnsavedChanges ? ' draft-status-unsaved' : ''}`} role="status">{hasUnsavedChanges ? 'Есть несохранённые изменения. Выполните расчёт, чтобы сохранить сессию.' : result ? 'Сессия сохранена в истории.' : 'Черновик сохраняется при переключении вкладок. После перезагрузки страницы он сбросится.'}</p>
     {instrumentsLoading && <RequestState kind="loading" compact title="Загружаем инструменты…">Введённые сделки останутся в таблице.</RequestState>}
-    {!instrumentsLoading && instrumentsError && <RequestState kind="error" compact title="Инструменты недоступны" onRetry={() => setInstrumentsRevision(value => value + 1)}>Проверьте соединение и повторите загрузку. Введённые сделки остаются в таблице.</RequestState>}
+    {!instrumentsLoading && instrumentsError && <RequestState kind="error" compact title="Инструменты недоступны" onRetry={() => setInstrumentsRevision(value => value + 1)}>{instrumentsError}</RequestState>}
     {!instrumentsLoading && !instrumentsError && !Object.keys(instruments).length && <RequestState kind="empty" compact title="Нет доступных инструментов" onRetry={() => setInstrumentsRevision(value => value + 1)}>Попробуйте обновить список позже.</RequestState>}
     {calculationError && <RequestState kind="error" compact title="Не удалось выполнить расчёт" onRetry={() => void calculate()}>{calculationError}</RequestState>}
     {calculating && <RequestState kind="loading" compact title="Выполняем расчёт…">Получаем результаты по вашим сделкам.</RequestState>}
@@ -168,7 +155,6 @@ export function NewSessionPage({ onCalculated }: { onCalculated: (id: string, na
       rows={rows} onChange={updateRow}
       onAdd={() => { setRows(previous => [...previous, createEmptyTrade()]); setResult(null); setCalculationError(''); setMessage(''); setError(false); }}
       onRemove={id => { setRows(previous => previous.filter(row => row.id !== id)); setResult(null); setCalculationError(''); setMessage(''); setError(false); }}
-      onLoadDemo={Object.keys(instruments).length ? loadDemo : undefined}
       onCalculate={calculate} calculating={calculating} calculateDisabled={instrumentsLoading || Boolean(instrumentsError) || !Object.keys(instruments).length} message={message} error={error}
       rowErrors={rowErrors} onFieldBlur={id => setTouchedRows(previous => new Set(previous).add(id))}
       instruments={instruments} result={result}

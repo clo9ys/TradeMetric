@@ -48,6 +48,3 @@
 .profile:hover { color: #c2d2ff; }
 .profile:hover .avatar { background-color: #cfddff; }
 @media (prefers-reduced-motion: reduce) { .profile, .profile .avatar { transition: none; } }
-.profile-email { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.profile-logout { margin-left: auto; padding: .375rem .625rem; border: 0; border-radius: .5rem; background: transparent; color: inherit; font: inherit; font-size: .8125rem; font-weight: 600; opacity: .8; cursor: pointer; }
-.profile-logout:hover, .profile-logout:focus-visible { opacity: 1; background: var(--color-nav-hover); }

@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { fetchCurrentUser, logout } from '../api/auth';
 import type { CurrentUser } from '../api/auth';
-import { onUnauthorized } from '../api/client';
+import { apiRequest, onUnauthorized } from '../api/client';
 import { WorkspaceLayout } from '../layouts/WorkspaceLayout';
 import { LoginPage } from '../pages/login/LoginPage';
 import { NewSessionPage } from '../pages/new-session/NewSessionPage';
 import { HistoryPage } from '../pages/history/HistoryPage';
 import { AdminPage } from '../pages/admin/AdminPage';
 import { DEFAULT_SESSION_NAME, normalizeSessionName, readSessionNames, writeSessionNames } from '../utils/sessionNames';
-import type { Currency, DemoCalculationResult, Page } from '../types/session';
+import type { Currency, CalculationResult, Page } from '../types/session';
 
 function currentPage(): Page {
   if (location.hash === '#adm_new') return 'adm_new';
@@ -25,7 +25,7 @@ export function App() {
   const [page, setPage] = useState<Page>(currentPage);
   const [currency, setCurrency] = useState<Currency>('RUB');
 
-  const [calculations, setCalculations] = useState<DemoCalculationResult[]>([]);
+  const [calculations, setCalculations] = useState<CalculationResult[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [historyError, setHistoryError] = useState('');
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
@@ -69,15 +69,13 @@ export function App() {
 
   const userId = user?.id;
   useEffect(() => {
+    setCalculations([]);
+    setSelectedHistoryId(null);
     if (!userId) return;
     const controller = new AbortController();
     setHistoryLoading(true);
     setHistoryError('');
-    fetch('/api/demo/history', { signal: controller.signal })
-      .then(async response => {
-        if (!response.ok) throw new Error('Не удалось загрузить историю. Попробуйте обновить страницу позже.');
-        return response.json() as Promise<{ calculations: DemoCalculationResult[] }>;
-      })
+    apiRequest<{ calculations: CalculationResult[] }>('/api/calculations', { signal: controller.signal })
       .then(data => {
         if (controller.signal.aborted) return;
         setCalculations(data.calculations);
@@ -93,7 +91,11 @@ export function App() {
   }, [historyActive, historyRevision, userId]);
 
   useEffect(() => {
-    const onHashChange = () => setPage(currentPage());
+    const onHashChange = () => {
+      const next = currentPage();
+      if (next === 'login') void handleLogout();
+      setPage(next);
+    };
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
@@ -110,7 +112,7 @@ export function App() {
   return <>
     {visiblePage === 'admin' && <main className="admin-workspace"><header className="admin-workspace-header"><a className="admin-back" href="#adm_new">Вернуться к расчётам</a><span>Администрирование</span></header><AdminPage currentUserId={user.id} onOwnPasswordChanged={() => { setUser(null); location.hash = '#login'; }} /></main>}
     <div hidden={visiblePage === 'admin'}>
-      <WorkspaceLayout adminMode={adminMode} userEmail={user.email} onLogout={handleLogout} page={workspacePage} currency={currency} onCurrencyChange={setCurrency} calculations={namedCalculations} selectedHistoryId={selectedHistoryId} onHistorySelect={setSelectedHistoryId} historyLoading={historyLoading} historyError={historyError}>
+      <WorkspaceLayout adminMode={adminMode} page={workspacePage} currency={currency} onCurrencyChange={setCurrency} calculations={namedCalculations} selectedHistoryId={selectedHistoryId} onHistorySelect={setSelectedHistoryId} historyLoading={historyLoading} historyError={historyError}>
         {nameStorageError && <p className="status-error" role="alert">{nameStorageError}</p>}
         <div hidden={workspacePage !== 'new'}><NewSessionPage onCalculated={(id, name) => { saveSessionName(id, name); setHistoryRevision(value => value + 1); }} /></div>
         <div hidden={workspacePage !== 'history'}><HistoryPage calculations={namedCalculations} selectedId={selectedHistoryId} onSelect={setSelectedHistoryId} loading={historyLoading} error={historyError} onRename={saveSessionName} onRetry={() => setHistoryRevision(value => value + 1)} /></div>

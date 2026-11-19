@@ -7,20 +7,21 @@ export interface TradeRow {
   quantity: string;
 }
 
-export interface DemoInstrument {
+export interface BondInstrument {
   isin: string;
   issue_name: string;
   issuer_name: string;
   currency: string;
   coupon_type: 'fixed' | 'floating';
   default_quantity: number;
+  quote_as_of_date?: string;
 }
 
-export interface DemoCalculationResult {
+export interface CalculationResult {
   calculation_id: string;
   title?: string;
   calculated_at?: string;
-  source: 'demo';
+  source: 'demo' | 'csv' | 'cbonds' | 'rudata' | 'mixed';
   currency: 'RUB';
   total_dv01_rub: string;
   total_fair_value_rub: string;
@@ -39,3 +40,7 @@ export function createEmptyTrade(): TradeRow {
 export function createEmptyTrades(): TradeRow[] {
   return Array.from({ length: 5 }, createEmptyTrade);
 }
+
+// Имена исходного frontend оставлены совместимыми с API-моделями.
+export type DemoInstrument = BondInstrument;
+export type DemoCalculationResult = CalculationResult;
