@@ -1,0 +1,4 @@
+isin,currency,nominal_per_bond,quote_kind,quote_value,price_type,quote_source,quote_as_of_date,coupon_type,accrued_per_bond,accrued_as_of_date,coupon_frequency,modified_duration,convexity,risk_as_of_date,issue_name,issuer_name,provider_instrument_id
+RUDEMO000016,RUB,1000,percent,101.25,clean,SYNTHETIC DEMO DATA - NOT CBONDS,2026-11-19,fixed,12.30,2026-11-19,,4.2,19.5,2026-11-19,DEMO fixed clean,Учебный эмитент 1,
+RUDEMO000024,RUB,1000,amount,980,dirty,SYNTHETIC DEMO DATA - NOT CBONDS,2026-11-19,fixed,,,,2.1,5,2026-11-19,DEMO fixed dirty short,Учебный эмитент 2,
+RUDEMO000032,RUB,1000,percent,99.5,clean,SYNTHETIC DEMO DATA - NOT CBONDS,2026-11-19,floating,4,2026-11-19,4,,,,DEMO floating clean,Учебный эмитент 3,

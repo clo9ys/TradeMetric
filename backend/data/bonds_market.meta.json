@@ -1,0 +1,12 @@
+{
+  "source": "MOEX ISS",
+  "downloaded_at": "2026-11-19T08:25:56.588171+00:00",
+  "market_trade_date": "2026-11-19",
+  "calculation_date": "2026-11-19",
+  "count": 100,
+  "csv_sha256": "0175ee650195012addb939f4f2f6257f106d55ce9cea04935222d94d88e5666c",
+  "selection": "RUB floating coupon; TQCB/TQOB; trades on market_trade_date; turnover descending",
+  "price_method": "dirty amount = nominal on settlement * LAST / 100 + ACCRUEDINT on SETTLEDATE",
+  "risk_method": "floating: modified_duration=1/COUPONFREQUENCY; convexity=0 (TradeMetric methodology)",
+  "rejected": []
+}

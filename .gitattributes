@@ -1,0 +1,3 @@
+
+# Preserve snapshot bytes for its SHA-256 manifest.
+backend/data/bonds_market.csv -text
