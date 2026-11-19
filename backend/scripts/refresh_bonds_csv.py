@@ -1,4 +1,4 @@
-"""Выгрузка реальных флоатеров MOEX ISS в CSV для CsvBondDataProvider."""
+"""Выгрузка реальных флоатеров RUB и закреплённых fixed CNY из MOEX ISS."""
 
 import argparse
 import asyncio
@@ -7,7 +7,7 @@ import hashlib
 import io
 import json
 from datetime import UTC, date, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 import httpx
@@ -15,12 +15,15 @@ import httpx
 from app.config import get_settings
 from app.domain.enums import CouponType, MarketDataSource, PriceType, QuoteKind
 from app.domain.market_data import NormalizedBondData
-from app.providers.csv import OPTIONAL_COLUMNS, REQUIRED_COLUMNS
+from app.providers.csv import OPTIONAL_COLUMNS, REQUIRED_COLUMNS, CsvBondDataProvider
 from app.services.market_data import MOSCOW
 
 ISS = "https://iss.moex.com/iss"
 MARKET_URL = f"{ISS}/engines/stock/markets/bonds/securities.json"
 FLOATING = "Облигация с плавающим купоном"
+FIXED_DETAILS = "Фиксированный с известными купонами"
+CALCULATOR_URL = f"{ISS}/apps/bondization/yieldscalculator"
+FIXED_CNY_ISINS = ("RU000A10GEU5", "RU000A1054W1", "RU000A10CP52")
 
 
 def records(document: dict, block: str) -> list[dict]:
@@ -92,7 +95,101 @@ def normalize_floater(
     )
 
 
-async def export_csv(output: Path, count: int, client: httpx.AsyncClient) -> dict:
+def normalize_fixed(
+    security: dict,
+    quote: dict,
+    description: dict,
+    issuer: dict,
+    calculated: dict,
+    *,
+    trade_date: date,
+    fetched_at: datetime,
+) -> NormalizedBondData:
+    """Цена, НКД и риски fixed из одного ответа калькулятора на одну дату."""
+    isin = security["ISIN"]
+    currency = security["FACEUNIT"]
+    if (
+        description.get("ISIN") != isin
+        or issuer.get("isin") != isin
+        or calculated.get("SECID") != security["SECID"]
+        or quote.get("SECID") != security["SECID"]
+        or quote.get("BOARDID") != security["BOARDID"]
+        or security.get("COUPON_DETAILS") != FIXED_DETAILS
+        or currency != "CNY"
+        or security["CURRENCYID"] != currency
+        or calculated.get("FACEUNIT") != currency
+        or calculated.get("COUPONCURRENCYID") != currency
+    ):
+        raise ValueError("Несогласованный выпуск, купон или валюта fixed")
+    if (
+        calculated.get("TRADEDATE") != trade_date.isoformat()
+        or calculated.get("SETTLEDATE") != trade_date.isoformat()
+        or date.fromisoformat(quote["SYSTIME"][:10]) != trade_date
+        or quote["NUMTRADES"] <= 0
+    ):
+        raise ValueError("Цена и риски fixed относятся к другой дате")
+    if calculated.get("SELLTYPE") != "MATDATE" or calculated.get("OFFERDATE"):
+        raise ValueError("Калькулятор вернул расчёт к оферте вместо погашения")
+    if calculated.get("MATDATE") != security["MATDATE"]:
+        raise ValueError("Не совпадает дата погашения")
+    values = {}
+    for name in (
+        "FACEVALUE",
+        "PRICEPRC",
+        "PRICE",
+        "PRICEWACCINT",
+        "ACCINT",
+        "MODIFIEDDURATION",
+        "CONVEXITY",
+    ):
+        try:
+            value = Decimal(str(calculated[name]))
+        except (KeyError, InvalidOperation) as error:
+            raise ValueError(f"Отсутствует числовое поле калькулятора {name}") from error
+        if not value.is_finite():
+            raise ValueError(f"Некорректное поле калькулятора {name}")
+        values[name] = value
+    if (
+        values["PRICEPRC"] != Decimal(str(quote["LAST"]))
+        or values["FACEVALUE"] != Decimal(str(security["FACEVALUE"]))
+        or values["PRICE"] != values["FACEVALUE"] * values["PRICEPRC"] / 100
+        or values["PRICEWACCINT"] != values["PRICE"] + values["ACCINT"]
+    ):
+        raise ValueError("Калькулятор использовал другую цену или номинал")
+    return NormalizedBondData(
+        isin=isin,
+        source=MarketDataSource.CSV,
+        currency=currency,
+        nominal_per_bond=values["FACEVALUE"],
+        quote_kind=QuoteKind.AMOUNT,
+        quote_value=values["PRICEWACCINT"],
+        price_type=PriceType.DIRTY,
+        quote_source=(
+            f"MOEX ISS {security['BOARDID']}; yieldscalculator BY_PRICE_TO_MATURITY; "
+            f"valuation={trade_date}"
+        ),
+        quote_as_of_date=trade_date,
+        coupon_type=CouponType.FIXED,
+        fetched_at=fetched_at,
+        accrued_per_bond=values["ACCINT"],
+        accrued_as_of_date=trade_date,
+        coupon_frequency=int(description["COUPONFREQUENCY"]),
+        modified_duration=values["MODIFIEDDURATION"],
+        convexity=values["CONVEXITY"],
+        risk_as_of_date=date.fromisoformat(calculated["TRADEDATE"]),
+        provider_instrument_id=security["SECID"],
+        issue_name=security["SECNAME"],
+        issuer_name=issuer.get("emitent_title") or None,
+    )
+
+
+async def export_csv(
+    output: Path,
+    count: int,
+    client: httpx.AsyncClient,
+    *,
+    add_fixed: bool = False,
+) -> dict:
     async def fetch(url: str, **params) -> dict:
         response = await client.get(url, params={"iss.meta": "off", **params})
         response.raise_for_status()
@@ -104,8 +201,9 @@ async def export_csv(output: Path, count: int, client: httpx.AsyncClient) -> dic
     if trade_date > fetched_at.astimezone(MOSCOW).date():
         raise ValueError("Биржа вернула будущую дату торгов")
     quotes = {(q["SECID"], q["BOARDID"]): q for q in records(document, "marketdata")}
+    securities = records(document, "securities")
     candidates = []
-    for security in records(document, "securities"):
+    for security in securities:
         quote = quotes.get((security["SECID"], security["BOARDID"]))
         if (
             security["BOARDID"] in ("TQCB", "TQOB")
@@ -119,7 +217,7 @@ async def export_csv(output: Path, count: int, client: httpx.AsyncClient) -> dic
     candidates.sort(key=lambda pair: Decimal(str(pair[1].get("VALTODAY") or 0)), reverse=True)
     semaphore = asyncio.Semaphore(4)
 
-    async def complete(security: dict, quote: dict):
+    async def complete(security: dict, quote: dict, *, fixed: bool = False):
         async with semaphore:
             secid = security["SECID"]
             details = await fetch(f"{ISS}/securities/{secid}.json")
@@ -130,9 +228,32 @@ async def export_csv(output: Path, count: int, client: httpx.AsyncClient) -> dic
                 for row in records(search, "securities")
                 if row["isin"] == security["ISIN"] and row["secid"] == secid
             )
-            bond = normalize_floater(
-                security, quote, description, issuer, trade_date=trade_date, fetched_at=fetched_at
-            )
+            calculator_params = {
+                "secid": secid,
+                "tradedate": trade_date.isoformat(),
+                "calc_method": "BY_PRICE_TO_MATURITY",
+                "calc_value": str(quote["LAST"]),
+            }
+            calculation = await fetch(CALCULATOR_URL, **calculator_params) if fixed else None
+            if fixed:
+                bond = normalize_fixed(
+                    security,
+                    quote,
+                    description,
+                    issuer,
+                    calculation["calculated"],
+                    trade_date=trade_date,
+                    fetched_at=fetched_at,
+                )
+            else:
+                bond = normalize_floater(
+                    security,
+                    quote,
+                    description,
+                    issuer,
+                    trade_date=trade_date,
+                    fetched_at=fetched_at,
+                )
             evidence = {
                 "security": security,
                 "quote": quote,
@@ -144,9 +265,32 @@ async def export_csv(output: Path, count: int, client: httpx.AsyncClient) -> dic
                     f"{ISS}/securities.json?q={security['ISIN']}",
                 ],
             }
+            if fixed:
+                evidence["calculation"] = calculation
+                evidence["calculation_request"] = calculator_params
+                evidence["urls"].append(CALCULATOR_URL)
             return bond, evidence
 
     selected: dict[str, tuple[NormalizedBondData, dict]] = {}
+    floating_downloaded_at = fetched_at
+    if add_fixed:
+        previous_metadata = json.loads(output.with_suffix(".meta.json").read_text(encoding="utf-8"))
+        if previous_metadata["market_trade_date"] != trade_date.isoformat():
+            raise ValueError("Старый CSV относится к другой дате. Выполните полное обновление.")
+        previous_source = json.loads(output.with_suffix(".source.json").read_text(encoding="utf-8"))
+        previous = await CsvBondDataProvider(
+            output,
+            source=MarketDataSource.CSV,
+            require_manifest=True,
+        ).list_bonds()
+        selected = {
+            bond.isin: (bond, previous_source[bond.isin])
+            for bond in previous
+            if bond.coupon_type is CouponType.FLOATING
+        }
+        if len(selected) != count:
+            raise ValueError("Число флоатеров в прежнем CSV отличается от --count")
+        floating_downloaded_at = datetime.fromisoformat(previous_metadata["downloaded_at"])
     rejected: list[str] = []
     # Небольшие пачки: не запрашиваем карточки для всех бумаг биржи.
     cursor = 0
@@ -167,6 +311,16 @@ async def export_csv(output: Path, count: int, client: httpx.AsyncClient) -> dic
             f"Найдено только {len(selected)} полных выпусков из {count}. "
             "Существующий CSV не изменён; пропуски не заполняются синтетическими значениями."
         )
+    # Эти fixed-выпуски обновляются при каждом запуске, а не исчезают из CSV завтра.
+    for isin in FIXED_CNY_ISINS:
+        security = next(
+            (row for row in securities if row["ISIN"] == isin and row["BOARDID"] == "TQOY"), None
+        )
+        if security is None:
+            raise ValueError(f"Нет валютного режима TQOY для {isin}; CSV не изменён")
+        quote = quotes[(security["SECID"], security["BOARDID"])]
+        bond, evidence = await complete(security, quote, fixed=True)
+        selected[bond.isin] = bond, evidence
     stream = io.StringIO(newline="")
     columns = sorted(REQUIRED_COLUMNS) + sorted(OPTIONAL_COLUMNS)
     writer = csv.DictWriter(stream, fieldnames=columns, lineterminator="\n")
@@ -181,19 +335,28 @@ async def export_csv(output: Path, count: int, client: httpx.AsyncClient) -> dic
     csv_bytes = stream.getvalue().encode("utf-8")
     metadata = {
         "source": "MOEX ISS",
-        "downloaded_at": fetched_at.isoformat(),
+        "downloaded_at": min(floating_downloaded_at, fetched_at).isoformat(),
+        "updated_at": fetched_at.isoformat(),
+        "floating_downloaded_at": floating_downloaded_at.isoformat(),
         "market_trade_date": trade_date.isoformat(),
         "calculation_date": fetched_at.astimezone(MOSCOW).date().isoformat(),
-        "count": count,
+        "count": len(selected),
+        "floating_count": count,
+        "fixed_isins": list(FIXED_CNY_ISINS),
         "csv_sha256": hashlib.sha256(csv_bytes).hexdigest(),
         "selection": (
-            "RUB floating coupon; TQCB/TQOB; trades on market_trade_date; turnover descending"
+            "RUB floating coupon; TQCB/TQOB; turnover descending; "
+            "plus pinned fixed CNY issues on TQOY; trades on market_trade_date"
         ),
         "price_method": (
             "dirty amount = nominal on settlement * LAST / 100 + ACCRUEDINT on SETTLEDATE"
         ),
         "risk_method": (
-            "floating: modified_duration=1/COUPONFREQUENCY; convexity=0 (TradeMetric methodology)"
+            "floating: 1/COUPONFREQUENCY and 0 (TradeMetric); "
+            "fixed: MODIFIEDDURATION and CONVEXITY from MOEX yieldscalculator"
+        ),
+        "fixed_price_method": (
+            "PRICEWACCINT and ACCINT from calculator on TRADEDATE (T+0 valuation)"
         ),
         "rejected": rejected,
     }
@@ -219,15 +382,20 @@ async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--count", type=int, default=100)
     parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--add-fixed",
+        action="store_true",
+        help="сохранить прежние флоатеры и добавить/обновить три fixed CNY",
+    )
     args = parser.parse_args()
     if not 1 <= args.count <= 1000:
         parser.error("--count должен быть в диапазоне 1..1000")
     settings = get_settings()
     output = args.output or settings.resolved_csv_path
     async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
-        metadata = await export_csv(output, args.count, client)
+        metadata = await export_csv(output, args.count, client, add_fixed=args.add_fixed)
     print(f"Saved {metadata['count']} real ISINs to {output}")
-    print(f"Market date: {metadata['market_trade_date']}; downloaded: {metadata['downloaded_at']}")
+    print(f"Market date: {metadata['market_trade_date']}; updated: {metadata['updated_at']}")
 
 
 if __name__ == "__main__":

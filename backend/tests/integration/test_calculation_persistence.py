@@ -608,9 +608,12 @@ async def test_regular_csv_site_login_calculation_and_private_history(database, 
         get_settings.cache_clear()
 
 
-async def test_all_100_real_market_isins_are_calculated_and_saved_atomically(database):
+async def test_all_real_market_isins_use_fixed_risks_and_cny_fx_atomically(database):
     import json
 
+    import httpx
+
+    from app.providers.cbr import CBRRateAdapter
     from app.providers.csv import CsvBondDataProvider
 
     path = Path(__file__).resolve().parents[2] / "data/bonds_market.csv"
@@ -623,9 +626,24 @@ async def test_all_100_real_market_isins_are_calculated_and_saved_atomically(dat
     factory = async_sessionmaker(
         bind=database, expire_on_commit=False, join_transaction_mode="create_savepoint"
     )
+    saving_uow = UnitOfWork(factory)
+    requests = []
+
+    def respond(request):
+        assert saving_uow._session is None
+        requests.append(request)
+        day = downloaded_at.strftime("%d.%m.%Y")
+        xml = (
+            f'<ValCurs Date="{day}"><Valute><CharCode>CNY</CharCode>'
+            '<Nominal>10</Nominal><Value>110,0000</Value></Valute></ValCurs>'
+        )
+        return httpx.Response(200, content=xml.encode())
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(respond))
     service = CalculationService(
-        UnitOfWork(factory),
+        saving_uow,
         MarketDataService(UnitOfWork(factory), provider, source=MarketDataSource.CSV),
+        CBRRateAdapter(client=client, clock=lambda: downloaded_at),
         clock=lambda: downloaded_at,
     )
     user_id = (
@@ -641,14 +659,32 @@ async def test_all_100_real_market_isins_are_calculated_and_saved_atomically(dat
         [TradeRequest(uuid.uuid4(), bond.isin, 1 if i % 2 else -1) for i, bond in enumerate(bonds)],
         last_trading_date=date.fromisoformat(metadata["market_trade_date"]),
     )
-    assert len(result.trades) == 100
+    await client.aclose()
+    assert len(result.trades) == 103
+    assert len(requests) == 1
+    by_isin = {bond.isin: bond for bond in bonds}
+    for trade in result.trades:
+        bond = by_isin[trade.isin]
+        if bond.coupon_type is CouponType.FIXED:
+            assert trade.currency == "CNY"
+            assert trade.fx_rate.rub_per_unit == 11
+            assert trade.metrics.duration_used == bond.modified_duration
+            assert trade.metrics.convexity_used == bond.convexity
+            assert trade.metrics.current_fair_value_rub == trade.quantity * bond.quote_value * 11
     assert result.total_dv01_rub == sum((row.metrics.dv01_rub for row in result.trades), Decimal(0))
     assert (
         await database.scalar(text("SELECT count(*) FROM instrument_snapshots WHERE source='csv'"))
-        == 100
+        == 103
     )
-    assert await database.scalar(text("SELECT count(*) FROM calculation_trades")) == 100
+    assert await database.scalar(text("SELECT count(*) FROM calculation_trades")) == 103
     assert (
         await database.scalar(text("SELECT count(*) FROM fx_rate_snapshots WHERE currency='RUB'"))
+        == 1
+    )
+
+    assert (
+        await database.scalar(
+            text("SELECT count(*) FROM fx_rate_snapshots WHERE currency='CNY' AND source='CBR'")
+        )
         == 1
     )
