@@ -28,6 +28,7 @@ class MarketDataSource(str, Enum):
     CBONDS = "cbonds"
     RUDATA = "rudata"
     DEMO = "demo"
+    CSV = "csv"
 
 
 class UserRole(str, Enum):

@@ -59,7 +59,7 @@ class FakeFXProvider:
         self.calls.append((currency, calculation_date))
         if self.fail:
             raise FXRateUnavailableError("Курс недоступен")
-        return FXRate(Decimal("80.5"), TRADING_DATE, "CBR")
+        return FXRate(Decimal("80.5"), TRADING_DATE, "CBR", currency, NOW)
 
 
 class FakeSnapshotRepository:
@@ -90,12 +90,18 @@ class FakeUnitOfWork:
     def __init__(self, *, fail: bool = False):
         self.snapshots = FakeSnapshotRepository()
         self.calculations = FakeCalculationRepository(fail=fail)
+        self.fx_snapshots = FakeSnapshotRepository()
         self.commits = 0
+        self.entries = 0
+        self.active = False
 
     async def __aenter__(self):
+        self.entries += 1
+        self.active = True
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
+        self.active = False
         return None
 
     async def commit(self):
@@ -130,6 +136,12 @@ async def test_repeated_isin_and_currency_are_loaded_once_but_trades_remain_sepa
     assert saved_trades[0].snapshot_id == saved_trades[1].snapshot_id
     assert [trade.fx_rate_rub for trade in saved_trades] == [Decimal("80.5")] * 2
     assert [trade.fx_effective_date for trade in saved_trades] == [TRADING_DATE] * 2
+    assert len(uow.fx_snapshots.added) == 1
+    snapshot = uow.fx_snapshots.added[0]
+    assert snapshot.currency == "USD"
+    assert snapshot.requested_date == CALCULATION_DATE
+    assert snapshot.fetched_at == NOW
+    assert [trade.fx_snapshot_id for trade in saved_trades] == [snapshot.id] * 2
     assert result.total_dv01_rub == sum((trade.dv01 for trade in saved_trades), Decimal(0))
     assert [trade.line_number for trade in result.trades] == [1, 2]
 
@@ -163,6 +175,7 @@ async def test_invalid_second_line_stops_before_data_access_or_transaction():
     assert market.calls == []
     assert fx.calls == []
     assert uow.commits == 0
+    assert uow.entries == 0
 
 
 @pytest.mark.asyncio
@@ -202,3 +215,58 @@ async def test_empty_or_duplicate_client_ids_are_rejected():
     with pytest.raises(InvalidCalculationError, match="повторяться"):
         await service.calculate(user_id, repeated, last_trading_date=TRADING_DATE)
     assert uow.commits == 0
+
+
+async def test_fx_provider_is_called_before_write_transaction():
+    uow = FakeUnitOfWork()
+
+    class CheckingFX(FakeFXProvider):
+        async def get_rate(self, currency, calculation_date):
+            assert not uow.active
+            assert uow.entries == 0
+            return await super().get_rate(currency, calculation_date)
+
+    service = CalculationService(uow, FakeMarketData(), CheckingFX(), clock=lambda: NOW)
+    await service.calculate(uuid.uuid4(), requests(), last_trading_date=TRADING_DATE)
+    assert uow.entries == 1
+
+
+async def test_rub_calculation_never_calls_fx_provider():
+    from dataclasses import replace
+
+    uow = FakeUnitOfWork()
+    market = FakeMarketData()
+    market.snapshot = _to_snapshot(replace(bond_data(), currency="RUB"))
+    fx = FakeFXProvider(fail=True)
+    result = await CalculationService(uow, market, fx, clock=lambda: NOW).calculate(
+        uuid.uuid4(), requests(), last_trading_date=TRADING_DATE
+    )
+    assert fx.calls == []
+    assert result.trades[0].fx_rate.rub_per_unit == 1
+    assert uow.fx_snapshots.added[0].source == "RUB"
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"currency": "EUR"},
+        {"rub_per_unit": Decimal("NaN")},
+        {"effective_date": date(2026, 10, 26)},
+        {"fetched_at": datetime(2026, 10, 25)},
+        {"source": ""},
+    ],
+)
+async def test_invalid_fx_metadata_prevents_all_writes(changes):
+    from dataclasses import replace
+
+    uow = FakeUnitOfWork()
+
+    class InvalidFX(FakeFXProvider):
+        async def get_rate(self, currency, calculation_date):
+            return replace(await super().get_rate(currency, calculation_date), **changes)
+
+    service = CalculationService(uow, FakeMarketData(), InvalidFX(), clock=lambda: NOW)
+    with pytest.raises(FXRateUnavailableError):
+        await service.calculate(uuid.uuid4(), requests(), last_trading_date=TRADING_DATE)
+    assert uow.entries == 0
+    assert uow.fx_snapshots.added == []

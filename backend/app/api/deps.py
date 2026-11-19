@@ -7,9 +7,13 @@ from app.config import get_settings
 from app.db.models import AuthSession
 from app.db.uow import UnitOfWork
 from app.domain.enums import UserRole
+from app.providers.cbr import CBRRateAdapter
+from app.providers.factory import build_bond_provider
 from app.security import tokens_equal
 from app.services.admin_users import AdminUserService
 from app.services.auth import AuthService, NotAuthenticated
+from app.services.calculation import CalculationService
+from app.services.market_data import MarketDataService
 
 SESSION_COOKIE = "tm_session"
 CSRF_HEADER = "X-CSRF-Token"
@@ -67,3 +71,22 @@ def get_admin_user_service(uow: Annotated[UnitOfWork, Depends(get_uow)]) -> Admi
 
 
 AdminUserServiceDep = Annotated[AdminUserService, Depends(get_admin_user_service)]
+
+
+def get_market_data_service(request: Request) -> MarketDataService:
+    settings = get_settings()
+    provider, source = build_bond_provider(settings)
+    factory = request.app.state.db.session_factory
+    return MarketDataService(UnitOfWork(factory), provider, source=source)
+
+
+def get_calculation_service(request: Request) -> CalculationService:
+    settings = get_settings()
+    factory = request.app.state.db.session_factory
+    market_data = get_market_data_service(request)
+    return CalculationService(
+        UnitOfWork(factory), market_data, CBRRateAdapter.from_settings(settings)
+    )
+
+
+CalculationServiceDep = Annotated[CalculationService, Depends(get_calculation_service)]

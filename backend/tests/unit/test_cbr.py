@@ -58,3 +58,62 @@ async def test_http_failure_is_distinct_from_missing_rate():
     ) as client:
         with pytest.raises(FXRateUnavailableError, match="не ответил"):
             await CBRRateAdapter(client=client).get_rate("USD", date(2026, 10, 25))
+
+
+@pytest.mark.parametrize(
+    "nominal,value",
+    [
+        ("0", "1"),
+        ("-10", "-100"),
+        ("NaN", "1"),
+        ("Infinity", "1"),
+        ("1", "NaN"),
+        ("1", "Infinity"),
+        ("1", "0"),
+        ("1", "-1"),
+        ("1.5", "10"),
+        ("oops", "10"),
+        ("", "10"),
+    ],
+)
+async def test_invalid_nominal_or_value_is_rejected(nominal, value):
+    xml = DAILY_XML.replace(
+        b"<Nominal>1</Nominal>", f"<Nominal>{nominal}</Nominal>".encode()
+    ).replace(b"<Value>80,5000</Value>", f"<Value>{value}</Value>".encode())
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, content=xml))
+    ) as client:
+        with pytest.raises(FXRateUnavailableError, match="некорректный"):
+            await CBRRateAdapter(client=client).get_rate("USD", date(2026, 10, 25))
+
+
+async def test_rub_does_not_call_external_service_and_records_provenance():
+    def unexpected(_):
+        raise AssertionError("RUB must not cause an HTTP request")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(unexpected)) as client:
+        rate = await CBRRateAdapter(client=client).get_rate("RUB", date(2026, 10, 25))
+    assert rate.rub_per_unit == 1
+    assert rate.currency == "RUB"
+    assert rate.source == "RUB"
+    assert rate.fetched_at.utcoffset() is not None
+
+
+@pytest.mark.parametrize(
+    "content", [b"broken", b"<html/>", b"<ValCurs/>", b'<ValCurs Date="bad"/>']
+)
+async def test_malformed_xml_is_reported(content):
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, content=content))
+    ) as client:
+        with pytest.raises(FXRateUnavailableError, match="некорректный"):
+            await CBRRateAdapter(client=client).get_rate("USD", date(2026, 10, 25))
+
+
+async def test_timeout_is_reported():
+    def timeout(request):
+        raise httpx.ReadTimeout("timed out", request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(timeout)) as client:
+        with pytest.raises(FXRateUnavailableError, match="не ответил"):
+            await CBRRateAdapter(client=client).get_rate("USD", date(2026, 10, 25))

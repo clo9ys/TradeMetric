@@ -9,6 +9,7 @@ from app.db.repositories import (
     SnapshotRepository,
     UserRepository,
 )
+from app.db.repositories.fx_rate_snapshot import FXRateSnapshotRepository
 
 
 class UnitOfWork:
@@ -29,6 +30,7 @@ class UnitOfWork:
     auth_sessions: AuthSessionRepository
     snapshots: SnapshotRepository
     calculations: CalculationRepository
+    fx_snapshots: FXRateSnapshotRepository
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._session_factory = session_factory
@@ -42,6 +44,7 @@ class UnitOfWork:
         self.auth_sessions = AuthSessionRepository(self._session)
         self.snapshots = SnapshotRepository(self._session)
         self.calculations = CalculationRepository(self._session)
+        self.fx_snapshots = FXRateSnapshotRepository(self._session)
         return self
 
     async def __aexit__(

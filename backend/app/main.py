@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.errors import register_error_handlers
-from app.api.routes import admin, auth, health
+from app.api.routes import admin, auth, calculations, health, instruments
 from app.config import get_settings
 from app.db.engine import DatabaseManager
 
@@ -22,6 +22,9 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(health.router)
     app.include_router(admin.router)
+
+    app.include_router(calculations.router)
+    app.include_router(instruments.router)
     if get_settings().demo_mode:
         from app.api.routes import demo
 

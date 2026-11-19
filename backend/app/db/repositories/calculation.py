@@ -21,7 +21,12 @@ class CalculationRepository:
         await self._session.flush()
 
     async def list_for_user(
-        self, user_id: uuid.UUID, *, limit: int = 50, offset: int = 0
+        self,
+        user_id: uuid.UUID,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        with_trades: bool = False,
     ) -> Sequence[Calculation]:
         """Только сами расчёты, без сделок: для списка истории."""
         query = (
@@ -31,6 +36,11 @@ class CalculationRepository:
             .limit(limit)
             .offset(offset)
         )
+        if with_trades:
+            query = query.options(
+                selectinload(Calculation.trades).selectinload(CalculationTrade.snapshot),
+                selectinload(Calculation.trades).selectinload(CalculationTrade.fx_snapshot),
+            )
         return (await self._session.scalars(query)).all()
 
     async def get_for_user(
@@ -40,7 +50,10 @@ class CalculationRepository:
         query = (
             select(Calculation)
             .where(Calculation.id == calculation_id, Calculation.user_id == user_id)
-            .options(selectinload(Calculation.trades).selectinload(CalculationTrade.snapshot))
+            .options(
+                selectinload(Calculation.trades).selectinload(CalculationTrade.snapshot),
+                selectinload(Calculation.trades).selectinload(CalculationTrade.fx_snapshot),
+            )
         )
         return await self._session.scalar(query)
 

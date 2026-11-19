@@ -125,9 +125,12 @@ async def test_fresh_cached_snapshot_skips_cbonds_and_write():
 
 
 @pytest.mark.asyncio
-async def test_valid_cached_snapshot_from_other_source_is_reused():
-    snapshot = cached(bond_data(source=MarketDataSource.RUDATA))
-    provider = FakeProvider({})
+@pytest.mark.parametrize(
+    "source", [MarketDataSource.RUDATA, MarketDataSource.DEMO, MarketDataSource.CSV]
+)
+async def test_cached_snapshot_from_other_source_is_not_reused(source):
+    snapshot = cached(bond_data(source=source))
+    provider = FakeProvider({FIRST_ISIN: bond_data()})
 
     result = await MarketDataService(
         FakeUnitOfWork(FakeSnapshotRepository([snapshot])), provider
@@ -135,8 +138,9 @@ async def test_valid_cached_snapshot_from_other_source_is_reused():
         [FIRST_ISIN], calculation_date=CALCULATION_DATE, last_trading_date=LAST_TRADING_DATE
     )
 
-    assert result[FIRST_ISIN] is snapshot
-    assert provider.calls == []
+    assert result[FIRST_ISIN] is not snapshot
+    assert result[FIRST_ISIN].source == "cbonds"
+    assert provider.calls == [FIRST_ISIN]
 
 
 @pytest.mark.asyncio

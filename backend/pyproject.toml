@@ -33,6 +33,7 @@ select = ["E", "F", "I", "B", "UP"]
 testpaths = ["tests"]
 pythonpath = ["."]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff.lint.per-file-ignores]
 # длинные SQL-выражения в автосгенерированных миграциях не переносим

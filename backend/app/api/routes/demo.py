@@ -4,30 +4,37 @@ from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictInt
 
-from app.api.deps import get_uow
+from app.api.deps import get_calculation_service, get_market_data_service
+from app.config import get_settings
 from app.db.models import Calculation, InstrumentSnapshot
 from app.db.uow import UnitOfWork
-from app.domain.errors import IncompleteMarketDataError, InvalidCalculationError, StaleMarketDataError
+from app.domain.errors import InvalidCalculationError
 from app.services.calculation import CalculationService, TradeRequest
-from app.services.market_data import MOSCOW, MarketDataService, snapshot_to_data
-from scripts.demo_calculation import DEMO_BONDS, DEMO_EMAIL, NoNetworkProvider, demo_isin
+from app.services.market_data import MOSCOW, MarketDataService
+from scripts.demo_calculation import DEMO_EMAIL, DEMO_TRADES
 
 router = APIRouter(prefix="/api/demo", tags=["demo"])
-DEMO_ISINS = {demo_isin(str(bond["isin_prefix"])) for bond in DEMO_BONDS}
-DEMO_ISSUERS = {
-    demo_isin(str(bond["isin_prefix"])): str(bond["issuer_name"]) for bond in DEMO_BONDS
-}
+DEMO_ISINS = {isin for isin, _ in DEMO_TRADES}
 
 
 class DemoTrade(BaseModel):
     isin: str
-    quantity: int
+    quantity: StrictInt
 
 
 class DemoCalculationRequest(BaseModel):
     trades: list[DemoTrade] = Field(min_length=1)
+
+
+def demo_date():
+    settings = get_settings()
+    if settings.bond_data_source != "csv" or settings.csv_data_mode != "demo":
+        raise HTTPException(409, "Для демо нужны BOND_DATA_SOURCE=csv и CSV_DATA_MODE=demo")
+    if settings.demo_last_trading_date is None:
+        raise HTTPException(409, "Укажите DEMO_LAST_TRADING_DATE: дату котировок учебного CSV")
+    return settings.demo_last_trading_date
 
 
 def serialize_calculation(calculation: Calculation) -> dict[str, object]:
@@ -45,123 +52,86 @@ def serialize_calculation(calculation: Calculation) -> dict[str, object]:
             {
                 "isin": trade.snapshot.isin,
                 "issue_name": trade.snapshot.issue_name,
-                "issuer_name": trade.snapshot.issuer_name or DEMO_ISSUERS.get(trade.snapshot.isin),
+                "issuer_name": trade.snapshot.issuer_name,
                 "currency": trade.snapshot.currency,
                 "coupon_type": trade.snapshot.coupon_type,
                 "quantity": trade.quantity,
                 "fair_value_rub": str(trade.current_fair_value),
                 "dv01_rub": str(trade.dv01),
+                "fx_rate_rub": str(trade.fx_rate_rub),
+                "fx_source": trade.fx_source,
+                "fx_effective_date": str(trade.fx_effective_date),
+                "fx_fetched_at": (
+                    trade.fx_snapshot.fetched_at.isoformat() if trade.fx_snapshot else None
+                ),
             }
             for trade in trades
         ],
     }
 
 
-async def get_demo_snapshots(uow: UnitOfWork) -> dict[str, InstrumentSnapshot]:
-    today = datetime.now(MOSCOW).date()
-    async with uow as unit:
-        rows = await unit.snapshots.get_fetched_on_date(sorted(DEMO_ISINS), today)
-    result: dict[str, InstrumentSnapshot] = {}
-    for row in rows:
-        if row.isin not in result and row.source == "demo":
-            try:
-                snapshot_to_data(row).validate_freshness(
-                    calculation_date=today, last_trading_date=today
-                )
-            except (IncompleteMarketDataError, StaleMarketDataError):
-                continue
-            result[row.isin] = row
-    return result
+async def get_demo_snapshots(market: MarketDataService) -> dict[str, InstrumentSnapshot]:
+    prepared = await market.prepare_snapshots(
+        sorted(DEMO_ISINS),
+        calculation_date=datetime.now(MOSCOW).date(),
+        last_trading_date=demo_date(),
+    )
+    return prepared.snapshots
 
 
 @router.get("/instruments")
-async def instruments(uow: Annotated[UnitOfWork, Depends(get_uow)]) -> dict[str, object]:
-    snapshots = await get_demo_snapshots(uow)
+async def instruments(
+    market: Annotated[MarketDataService, Depends(get_market_data_service)],
+) -> dict[str, object]:
+    snapshots = await get_demo_snapshots(market)
     return {
         "source": "demo",
         "instruments": [
             {
                 "isin": isin,
                 "issue_name": snapshots[isin].issue_name,
-                "issuer_name": snapshots[isin].issuer_name or DEMO_ISSUERS[isin],
+                "issuer_name": snapshots[isin].issuer_name,
                 "currency": snapshots[isin].currency,
                 "coupon_type": snapshots[isin].coupon_type,
-                "default_quantity": bond["quantity"],
+                "default_quantity": quantity,
             }
-            for bond in DEMO_BONDS
-            if (isin := demo_isin(str(bond["isin_prefix"]))) in snapshots
+            for isin, quantity in DEMO_TRADES
         ],
     }
 
 
 @router.get("/history")
-async def history(
-    request: Request,
-) -> dict[str, object]:
+async def history(request: Request) -> dict[str, object]:
+    demo_date()
     async with UnitOfWork(request.app.state.db.session_factory) as unit:
         user = await unit.users.get_by_email(DEMO_EMAIL)
         if user is None:
             return {"calculations": []}
         recent = await unit.calculations.list_for_user(user.id, limit=20)
-        calculations = [
-            await unit.calculations.get_for_user(item.id, user.id) for item in recent
-        ]
-        return {
-            "calculations": [serialize_calculation(item) for item in calculations if item is not None]
-        }
+        calculations = [await unit.calculations.get_for_user(item.id, user.id) for item in recent]
+        return {"calculations": [serialize_calculation(item) for item in calculations if item]}
 
 
 @router.post("/calculate")
 async def calculate_demo(
     payload: DemoCalculationRequest,
     request: Request,
-    uow: Annotated[UnitOfWork, Depends(get_uow)],
+    service: Annotated[CalculationService, Depends(get_calculation_service)],
 ) -> dict[str, object]:
+    last_trading_date = demo_date()
     if any(trade.isin not in DEMO_ISINS for trade in payload.trades):
-        raise HTTPException(400, "В демо доступны только три тестовых ISIN")
-    available = await get_demo_snapshots(uow)
-    if any(trade.isin not in available for trade in payload.trades):
-        raise HTTPException(409, "Демо-снимки за сегодня не найдены. Запустите demo_calculation.py")
-
+        raise InvalidCalculationError("В демо доступны только три тестовых ISIN")
     async with UnitOfWork(request.app.state.db.session_factory) as unit:
         user = await unit.users.get_by_email(DEMO_EMAIL)
     if user is None:
-        raise HTTPException(409, "Демо-пользователь не найден. Запустите demo_calculation.py")
-
-    market_data = MarketDataService(
-        UnitOfWork(request.app.state.db.session_factory), NoNetworkProvider()
-    )
-    service = CalculationService(UnitOfWork(request.app.state.db.session_factory), market_data)
-    try:
-        result = await service.calculate(
-            user.id,
-            [
-                TradeRequest(client_trade_id=uuid.uuid4(), isin=trade.isin, quantity=trade.quantity)
-                for trade in payload.trades
-            ],
-            last_trading_date=datetime.now(MOSCOW).date(),
+        raise HTTPException(
+            409, "Демо-пользователь не найден. Запустите python -m scripts.demo_calculation"
         )
-    except (InvalidCalculationError, IncompleteMarketDataError, StaleMarketDataError) as error:
-        raise HTTPException(400, str(error)) from error
-    return {
-        "calculation_id": str(result.id),
-        "source": "demo",
-        "currency": "RUB",
-        "total_dv01_rub": str(result.total_dv01_rub),
-        "total_fair_value_rub": str(
-            sum((trade.metrics.current_fair_value_rub for trade in result.trades), Decimal(0))
-        ),
-        "trades": [
-            {
-                "isin": trade.isin,
-                "issue_name": available[trade.isin].issue_name,
-                "issuer_name": available[trade.isin].issuer_name or DEMO_ISSUERS[trade.isin],
-                "currency": available[trade.isin].currency,
-                "coupon_type": available[trade.isin].coupon_type,
-                "quantity": trade.quantity,
-                "fair_value_rub": str(trade.metrics.current_fair_value_rub),
-                "dv01_rub": str(trade.metrics.dv01_rub),
-            }
-            for trade in result.trades
-        ],
-    }
+    result = await service.calculate(
+        user.id,
+        [TradeRequest(uuid.uuid4(), trade.isin, trade.quantity) for trade in payload.trades],
+        last_trading_date=last_trading_date,
+    )
+    async with UnitOfWork(request.app.state.db.session_factory) as unit:
+        saved = await unit.calculations.get_for_user(result.id, user.id)
+        return serialize_calculation(saved)

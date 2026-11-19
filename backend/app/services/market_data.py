@@ -87,11 +87,18 @@ def _to_snapshot(data: NormalizedBondData) -> InstrumentSnapshot:
 
 
 class MarketDataService:
-    """Выбирает свежие снимки из кэша или загружает их из Cbonds"""
+    """Выбирает свежие снимки только настроенного источника."""
 
-    def __init__(self, uow: UnitOfWork, cbonds: BondDataProvider) -> None:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        provider: BondDataProvider,
+        *,
+        source: MarketDataSource = MarketDataSource.CBONDS,
+    ) -> None:
         self._uow = uow
-        self._cbonds = cbonds
+        self._provider = provider
+        self._source = source
 
     async def resolve_snapshots(
         self,
@@ -129,6 +136,8 @@ class MarketDataService:
 
         resolved: dict[str, InstrumentSnapshot] = {}
         for snapshot in cached:
+            if snapshot.source != self._source.value:
+                continue
             if snapshot.isin in resolved:
                 continue
             try:
@@ -145,17 +154,17 @@ class MarketDataService:
         for isin in unique_isins:
             if isin in resolved:
                 continue
-            data = await self._cbonds.get_bond(isin)
-            if data.isin != isin or data.source is not MarketDataSource.CBONDS:
+            data = await self._provider.get_bond(isin)
+            if data.isin != isin or data.source is not self._source:
                 raise IncompleteMarketDataError(
-                    "Cbonds вернул данные другого инструмента или источника"
+                    "Поставщик вернул данные другого инструмента или источника"
                 )
             data.validate_freshness(
                 calculation_date=calculation_date,
                 last_trading_date=last_trading_date,
             )
             if data.fetched_at.astimezone(MOSCOW).date() != calculation_date:
-                raise StaleMarketDataError("Данные Cbonds загружены не в день расчёта по Москве")
+                raise StaleMarketDataError("Данные загружены не в день расчёта по Москве")
             snapshot = _to_snapshot(data)
             new_snapshots.append(snapshot)
             resolved[isin] = snapshot

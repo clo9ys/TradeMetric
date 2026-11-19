@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from app.db.models import Calculation, CalculationTrade
+from app.db.models import Calculation, CalculationTrade, FXRateSnapshot
 from app.db.uow import UnitOfWork
-from app.domain.enums import CouponType, PriceType, QuoteKind
+from app.domain.enums import CouponType, MarketDataSource, PriceType, QuoteKind
 from app.domain.errors import (
     FXRateUnavailableError,
     IncompleteMarketDataError,
@@ -97,6 +97,7 @@ class CalculatedTrade:
     quantity: int
     snapshot_id: uuid.UUID
     currency: str
+    market_data_source: MarketDataSource
     fx_rate: FXRate
     metrics: TradeMetrics
 
@@ -136,7 +137,7 @@ class CalculationService:
         last_trading_date: date,
     ) -> CalculationResult:
         """Проверяет строки, получает снимки и курсы, считает и сохраняет результат"""
-        
+
         if not isinstance(user_id, uuid.UUID):
             raise InvalidCalculationError("Не указан пользователь расчёта")
         if not trades:
@@ -150,7 +151,7 @@ class CalculationService:
                 raise InvalidCalculationError("У каждой строки должен быть client_trade_id")
             if trade.client_trade_id in client_ids:
                 raise InvalidCalculationError("client_trade_id не должен повторяться")
-            
+
             client_ids.add(trade.client_trade_id)
             normalized.append(
                 TradeRequest(
@@ -176,22 +177,27 @@ class CalculationService:
         fx_rates: dict[str, FXRate] = {}
         for currency in dict.fromkeys(bond.currency for bond in bonds.values()):
             if currency == "RUB":
-                fx_rates[currency] = FXRate(Decimal(1), calculation_date, "RUB")
+                fx_rates[currency] = FXRate(
+                    Decimal(1), calculation_date, "RUB", currency, requested_at
+                )
                 continue
             if self._fx_provider is None:
                 raise FXRateUnavailableError(f"Не настроен источник курса {currency}")
             rate = await self._fx_provider.get_rate(currency, calculation_date)
-            if (
-                not isinstance(rate.rub_per_unit, Decimal)
-                or not rate.rub_per_unit.is_finite()
-                or rate.rub_per_unit <= 0
-                or type(rate.effective_date) is not date
-                or rate.effective_date > calculation_date
-                or not isinstance(rate.source, str)
-                or not rate.source.strip()
-            ):
-                raise FXRateUnavailableError(f"Нет действующего курса {currency} на дату расчёта")
+            rate.validate_for(currency, calculation_date)
             fx_rates[currency] = rate
+
+        fx_snapshots = {
+            currency: FXRateSnapshot(
+                currency=currency,
+                rub_per_unit=rate.rub_per_unit,
+                effective_date=rate.effective_date,
+                requested_date=calculation_date,
+                fetched_at=rate.fetched_at,
+                source=rate.source,
+            )
+            for currency, rate in fx_rates.items()
+        }
 
         metrics = [
             calculate_trade_metrics(
@@ -214,6 +220,7 @@ class CalculationService:
         async with self._uow as uow:
             if prepared.new_snapshots:
                 await uow.snapshots.add_many(prepared.new_snapshots)
+            await uow.fx_snapshots.add_many(list(fx_snapshots.values()))
             saved_trades = [
                 CalculationTrade(
                     snapshot_id=prepared.snapshots[trade.isin].id,
@@ -227,8 +234,8 @@ class CalculationService:
                     fx_rate_rub=fx_rates[bonds[trade.isin].currency].rub_per_unit,
                     fx_effective_date=fx_rates[bonds[trade.isin].currency].effective_date,
                     fx_source=fx_rates[bonds[trade.isin].currency].source,
+                    fx_snapshot_id=fx_snapshots[bonds[trade.isin].currency].id,
                 )
-
                 # для нумерации
                 for line_number, (trade, result) in enumerate(
                     zip(normalized, metrics, strict=True), 1
@@ -251,6 +258,7 @@ class CalculationService:
                     quantity=trade.quantity,
                     snapshot_id=saved_trade.snapshot_id,
                     currency=bonds[trade.isin].currency,
+                    market_data_source=bonds[trade.isin].source,
                     fx_rate=fx_rates[bonds[trade.isin].currency],
                     metrics=result,
                 )

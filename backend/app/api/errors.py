@@ -1,11 +1,17 @@
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
+from app.domain.errors import DomainError, FXRateUnavailableError, ProviderUnavailableError
 from app.services.admin_users import AdminRuleViolation, EmailTaken, UserNotFound
 from app.services.auth import InvalidCredentials, NotAuthenticated
 
 
 def register_error_handlers(app: FastAPI) -> None:
+    @app.exception_handler(DomainError)
+    async def domain_error(request: Request, exc: DomainError) -> JSONResponse:
+        code = 503 if isinstance(exc, (ProviderUnavailableError, FXRateUnavailableError)) else 400
+        return JSONResponse(status_code=code, content={"detail": str(exc)})
+
     @app.exception_handler(InvalidCredentials)
     async def invalid_credentials(request: Request, exc: InvalidCredentials) -> JSONResponse:
         return JSONResponse(

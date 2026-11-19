@@ -18,6 +18,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.db.models.calculation import Calculation
+from app.db.models.fx_rate_snapshot import FXRateSnapshot
 from app.db.models.instrument_snapshot import InstrumentSnapshot
 
 
@@ -54,6 +55,11 @@ class CalculationTrade(Base):
     fx_rate_rub: Mapped[Decimal | None] = mapped_column(Numeric)
     fx_effective_date: Mapped[date | None] = mapped_column(Date)
     fx_source: Mapped[str | None] = mapped_column(String(50))
+    # NULL допустим только для истории, созданной до миграции 0006.\
+    fx_snapshot_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("fx_rate_snapshots.id", ondelete="RESTRICT"), index=True
+    )
 
     calculation: Mapped[Calculation] = relationship(back_populates="trades", lazy="raise")
     snapshot: Mapped[InstrumentSnapshot] = relationship(lazy="raise")
+    fx_snapshot: Mapped[FXRateSnapshot | None] = relationship(lazy="raise")

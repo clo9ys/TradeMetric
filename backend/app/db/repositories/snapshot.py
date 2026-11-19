@@ -13,7 +13,9 @@ class SnapshotRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def get_fetched_on_date(self, isins: Sequence[str], calculation_date: date) -> list[InstrumentSnapshot]:
+    async def get_fetched_on_date(
+        self, isins: Sequence[str], calculation_date: date
+    ) -> list[InstrumentSnapshot]:
         """Ищет снимки, загруженные в дату расчёта по Москве, начиная с новых"""
         if not isins:
             return []

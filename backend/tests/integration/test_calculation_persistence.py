@@ -86,7 +86,7 @@ async def insert_snapshot(
                 "price_type": price_type,
                 "as_of_date": date(2026, 10, 23),
                 "risk_as_of_date": date(2026, 10, 23) if coupon_type == "fixed" else None,
-                "accrued_as_of_date": date(2026, 10, 23) if price_type == "clean" else None,
+                "accrued_as_of_date": date(2026, 10, 23),
                 "fetched_at": datetime(2026, 10, 25, tzinfo=UTC),
                 "currency": currency,
                 "quote_kind": quote_kind,
@@ -328,3 +328,327 @@ async def test_service_rolls_back_new_snapshot_when_calculation_insert_fails(
     assert await database.scalar(text("SELECT COUNT(*) FROM instrument_snapshots")) == 0
     assert await database.scalar(text("SELECT COUNT(*) FROM calculations")) == 0
     assert await database.scalar(text("SELECT COUNT(*) FROM calculation_trades")) == 0
+
+
+@pytest.fixture
+async def csv_fx_service(database, tmp_path):
+    import csv
+
+    import httpx
+
+    from app.providers.cbr import CBRRateAdapter
+    from app.providers.csv import CsvBondDataProvider
+    from tests.unit.test_cbr import DAILY_XML
+
+    sample = Path(__file__).resolve().parents[2] / "data/bonds_demo.csv"
+    with sample.open(encoding="utf-8-sig", newline="") as file:
+        reader = csv.DictReader(file)
+        columns = reader.fieldnames
+        rows = list(reader)
+    for row in rows:
+        row["currency"] = "CNY" if row["coupon_type"] == "floating" else "USD"
+        for field in ("quote_as_of_date", "risk_as_of_date", "accrued_as_of_date"):
+            if row[field]:
+                row[field] = "2026-10-23"
+    path = tmp_path / "synthetic.csv"
+    with path.open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=columns)
+        writer.writeheader()
+        writer.writerows(rows)
+    factory = async_sessionmaker(
+        bind=database, expire_on_commit=False, join_transaction_mode="create_savepoint"
+    )
+    uow = UnitOfWork(factory)
+    calls = []
+
+    def respond(request):
+        calls.append(request)
+        # HTTP происходит вне транзакции записи CalculationService.
+        assert uow._session is None
+        return httpx.Response(200, content=DAILY_XML)
+
+    now = datetime(2026, 10, 25, 12, tzinfo=UTC)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        provider = CsvBondDataProvider(path, source=MarketDataSource.CSV, clock=lambda: now)
+        market = MarketDataService(uow, provider, source=MarketDataSource.CSV)
+        service = CalculationService(
+            uow, market, CBRRateAdapter(client=client, clock=lambda: now), clock=lambda: now
+        )
+        yield service, calls
+
+
+async def test_csv_and_cbr_chain_saves_fx_provenance_and_repeated_rows(database, csv_fx_service):
+    service, calls = csv_fx_service
+    user_id = (
+        await database.execute(
+            text(
+                "INSERT INTO users (email, password_hash) "
+                "VALUES ('csv@example.test', 'test') RETURNING id"
+            )
+        )
+    ).scalar_one()
+    lines = [
+        TradeRequest(uuid.uuid4(), "RUDEMO000016", 3),
+        TradeRequest(uuid.uuid4(), "RUDEMO000016", -1),
+        TradeRequest(uuid.uuid4(), "RUDEMO000032", 4),
+    ]
+    result = await service.calculate(user_id, lines, last_trading_date=date(2026, 10, 23))
+    assert len(calls) == 2  # Один вызов на уникальную валюту.
+    assert result.trades[0].snapshot_id == result.trades[1].snapshot_id
+    assert result.trades[2].fx_rate.rub_per_unit == Decimal("11")
+    rows = (
+        (
+            await database.execute(
+                text(
+                    "SELECT t.quantity, t.fx_snapshot_id, f.currency, "
+                    "f.rub_per_unit, f.effective_date, "
+                    "f.requested_date, f.fetched_at, f.source FROM calculation_trades t "
+                    "JOIN fx_rate_snapshots f ON f.id = t.fx_snapshot_id "
+                    "ORDER BY t.line_number"
+                )
+            )
+        )
+        .mappings()
+        .all()
+    )
+    assert [row["quantity"] for row in rows] == [3, -1, 4]
+    assert rows[0]["fx_snapshot_id"] == rows[1]["fx_snapshot_id"]
+    assert {row["currency"] for row in rows} == {"USD", "CNY"}
+    assert all(row["effective_date"] == date(2026, 10, 23) for row in rows)
+    assert all(row["requested_date"] == date(2026, 10, 25) for row in rows)
+    assert all(row["fetched_at"] == datetime(2026, 10, 25, 12, tzinfo=UTC) for row in rows)
+    assert all(row["source"] == "CBR" for row in rows)
+    assert await database.scalar(text("SELECT count(*) FROM fx_rate_snapshots")) == 2
+    assert (
+        await database.scalar(
+            text("SELECT count(*) FROM instrument_snapshots WHERE source = 'csv'")
+        )
+        == 2
+    )
+
+
+async def test_last_row_db_failure_rolls_back_bonds_fx_and_calculation(database, csv_fx_service):
+    service, calls = csv_fx_service
+    user_id = (
+        await database.execute(
+            text(
+                "INSERT INTO users (email, password_hash) "
+                "VALUES ('rollback@example.test', 'test') RETURNING id"
+            )
+        )
+    ).scalar_one()
+    await database.execute(
+        text(
+            "ALTER TABLE calculation_trades ADD CONSTRAINT test_reject_short CHECK (quantity <> -1)"
+        )
+    )
+    lines = [
+        TradeRequest(uuid.uuid4(), "RUDEMO000016", 3),
+        TradeRequest(uuid.uuid4(), "RUDEMO000016", -1),
+    ]
+    with pytest.raises(IntegrityError):
+        await service.calculate(user_id, lines, last_trading_date=date(2026, 10, 23))
+    assert len(calls) == 1
+    for table in (
+        "instrument_snapshots",
+        "fx_rate_snapshots",
+        "calculations",
+        "calculation_trades",
+    ):
+        assert await database.scalar(text(f"SELECT count(*) FROM {table}")) == 0
+
+
+async def test_model_metadata_matches_migrated_schema(database):
+    from alembic.autogenerate import compare_metadata
+    from alembic.migration import MigrationContext
+
+    from app.db.base import Base
+
+    differences = await database.run_sync(
+        lambda connection: compare_metadata(MigrationContext.configure(connection), Base.metadata)
+    )
+    assert differences == []
+
+
+async def test_demo_script_reads_csv_and_saves_complete_calculation(database, monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    from app.config import Settings
+    from app.providers.csv import CsvBondDataProvider
+    from scripts import demo_calculation as demo
+
+    now = datetime(2026, 11, 19, 12, tzinfo=UTC)
+    factory = async_sessionmaker(
+        bind=database, expire_on_commit=False, join_transaction_mode="create_savepoint"
+    )
+
+    async def ping():
+        return True
+
+    async def dispose():
+        pass
+
+    monkeypatch.setattr(
+        demo,
+        "DatabaseManager",
+        lambda _: SimpleNamespace(
+            session_factory=factory,
+            ping=ping,
+            dispose=dispose,
+        ),
+    )
+    settings = Settings(
+        _env_file=None, postgres_user="test", postgres_password="test", postgres_db="test"
+    )
+    monkeypatch.setattr(demo, "get_settings", lambda: settings)
+    monkeypatch.setattr(
+        demo,
+        "build_bond_provider",
+        lambda settings: (
+            CsvBondDataProvider(settings.resolved_csv_path, clock=lambda: now),
+            MarketDataSource.DEMO,
+        ),
+    )
+    original_service = demo.CalculationService
+    monkeypatch.setattr(
+        demo, "CalculationService", lambda *args: original_service(*args, clock=lambda: now)
+    )
+    await demo.run_demo(date(2026, 11, 19))
+    output = capsys.readouterr().out
+    assert "TOTAL DV01 RUB: -3.449108320000" in output
+    assert "market dates were NOT changed" in output
+    assert await database.scalar(text("SELECT count(*) FROM calculation_trades")) == 3
+    assert await database.scalar(text("SELECT count(*) FROM fx_rate_snapshots")) == 1
+
+
+async def test_regular_csv_site_login_calculation_and_private_history(database, monkeypatch):
+    from types import SimpleNamespace
+
+    import httpx
+
+    from app.api.deps import get_calculation_service
+    from app.config import get_settings
+    from app.main import create_app
+    from app.providers.csv import CsvBondDataProvider
+    from app.security import hash_password
+
+    monkeypatch.setenv("DEMO_MODE", "false")
+    monkeypatch.setenv("BOND_DATA_SOURCE", "csv")
+    monkeypatch.setenv("CSV_DATA_MODE", "demo")
+    monkeypatch.setenv("CSV_REQUIRE_MANIFEST", "false")
+    monkeypatch.setenv(
+        "CSV_BONDS_PATH", str(Path(__file__).resolve().parents[2] / "data/bonds_demo.csv")
+    )
+    get_settings.cache_clear()
+    factory = async_sessionmaker(
+        bind=database, expire_on_commit=False, join_transaction_mode="create_savepoint"
+    )
+    password_hash = hash_password("site-password")
+    for email in ("alice@example.com", "bob@example.com"):
+        await database.execute(
+            text("INSERT INTO users (email, password_hash) VALUES (:email, :hash)"),
+            {"email": email, "hash": password_hash},
+        )
+    now = datetime(2026, 11, 19, 12, tzinfo=UTC)
+    provider = CsvBondDataProvider(get_settings().resolved_csv_path, clock=lambda: now)
+    market = MarketDataService(UnitOfWork(factory), provider, source=MarketDataSource.DEMO)
+    service = CalculationService(UnitOfWork(factory), market, clock=lambda: now)
+    app = create_app()
+    app.state.db = SimpleNamespace(session_factory=factory)
+    app.dependency_overrides[get_calculation_service] = lambda: service
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            assert (await client.get("/api/calculations")).status_code == 401
+            assert (await client.get("/api/instruments")).status_code == 401
+            assert (await client.get("/api/demo/history")).status_code == 404
+            auth = await client.post(
+                "/api/auth/login", json={"email": "alice@example.com", "password": "site-password"}
+            )
+            assert auth.status_code == 200
+            catalog = await client.get("/api/instruments")
+            assert catalog.status_code == 200
+            assert catalog.json()["source"] == "demo"
+            assert len(catalog.json()["instruments"]) == 3
+            assert catalog.json()["instruments"][0]["quote_as_of_date"] == "2026-11-19"
+            body = {
+                "last_trading_date": "2026-11-19",
+                "trades": [
+                    {"isin": "RUDEMO000016", "quantity": 10},
+                    {"isin": "RUDEMO000024", "quantity": -5},
+                    {"isin": "RUDEMO000032", "quantity": 7},
+                ],
+            }
+            assert (await client.post("/api/calculations", json=body)).status_code == 403
+            saved = await client.post(
+                "/api/calculations", json=body, headers={"X-CSRF-Token": auth.json()["csrf_token"]}
+            )
+            assert saved.status_code == 200, saved.text
+            calculation_id = saved.json()["id"]
+            detail = await client.get(f"/api/calculations/{calculation_id}")
+            assert detail.status_code == 200
+            assert Decimal(detail.json()["total_dv01_rub"]) == Decimal("-3.44910832")
+            assert all(
+                row["fx_source"] == "RUB" and row["fx_fetched_at"]
+                for row in detail.json()["trades"]
+            )
+            history = await client.get("/api/calculations")
+            assert [row["calculation_id"] for row in history.json()["calculations"]] == [
+                calculation_id
+            ]
+            assert (await client.get("/api/calculations?limit=0")).status_code == 422
+            other = await client.post(
+                "/api/auth/login", json={"email": "bob@example.com", "password": "site-password"}
+            )
+            assert other.status_code == 200
+            assert (await client.get("/api/calculations")).json() == {"calculations": []}
+            assert (await client.get(f"/api/calculations/{calculation_id}")).status_code == 404
+    finally:
+        get_settings.cache_clear()
+
+
+async def test_all_100_real_market_isins_are_calculated_and_saved_atomically(database):
+    import json
+
+    from app.providers.csv import CsvBondDataProvider
+
+    path = Path(__file__).resolve().parents[2] / "data/bonds_market.csv"
+    metadata = json.loads(path.with_suffix(".meta.json").read_text(encoding="utf-8"))
+    downloaded_at = datetime.fromisoformat(metadata["downloaded_at"])
+    provider = CsvBondDataProvider(
+        path, source=MarketDataSource.CSV, clock=lambda: downloaded_at, require_manifest=True
+    )
+    bonds = await provider.list_bonds()
+    factory = async_sessionmaker(
+        bind=database, expire_on_commit=False, join_transaction_mode="create_savepoint"
+    )
+    service = CalculationService(
+        UnitOfWork(factory),
+        MarketDataService(UnitOfWork(factory), provider, source=MarketDataSource.CSV),
+        clock=lambda: downloaded_at,
+    )
+    user_id = (
+        await database.execute(
+            text(
+                "INSERT INTO users (email, password_hash) "
+                "VALUES ('market100@example.com', 'test') RETURNING id"
+            )
+        )
+    ).scalar_one()
+    result = await service.calculate(
+        user_id,
+        [TradeRequest(uuid.uuid4(), bond.isin, 1 if i % 2 else -1) for i, bond in enumerate(bonds)],
+        last_trading_date=date.fromisoformat(metadata["market_trade_date"]),
+    )
+    assert len(result.trades) == 100
+    assert result.total_dv01_rub == sum((row.metrics.dv01_rub for row in result.trades), Decimal(0))
+    assert (
+        await database.scalar(text("SELECT count(*) FROM instrument_snapshots WHERE source='csv'"))
+        == 100
+    )
+    assert await database.scalar(text("SELECT count(*) FROM calculation_trades")) == 100
+    assert (
+        await database.scalar(text("SELECT count(*) FROM fx_rate_snapshots WHERE currency='RUB'"))
+        == 1
+    )
